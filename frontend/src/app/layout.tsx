@@ -18,7 +18,16 @@ const plexSans = IBM_Plex_Sans({
 export const metadata: Metadata = {
   title: "SwasthyaGrid AI — District Health Operations Center",
   description:
-    "An AI district health operations center that predicts, explains, and recommends resource redistribution across PHCs and CHCs — with a human always in the loop.",
+    "An AI district health operations center that predicts, explains, and recommends resource redistribution across PHCs and CHCs — with a Citizen Portal for emergency guidance and nearest PHC routing. Human always in the loop.",
+  keywords: ["healthcare", "AI", "district health", "PHC", "Gemini", "Google Cloud", "emergency guidance"],
+  openGraph: {
+    title: "SwasthyaGrid AI",
+    description: "Predictive · Prescriptive · Explainable · Human-Governed · Citizen-Centric",
+    url: "https://swasthyagrid.vercel.app",
+    siteName: "SwasthyaGrid AI",
+    locale: "en_IN",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
