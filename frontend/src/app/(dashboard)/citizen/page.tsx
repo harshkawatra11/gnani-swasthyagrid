@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import { PublicAskPanel } from "@/components/PublicAskPanel";
 import { HeartPulse } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Citizen Services — SwasthyaGrid AI",
+  description:
+    "Get instant emergency first-aid guidance (108 routing) and find the nearest PHC or hospital using your GPS coordinates.",
+};
 
 export default function CitizenServicesPage() {
   return (
