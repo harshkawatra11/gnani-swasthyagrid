@@ -3,7 +3,7 @@
 ## Project
 **SwasthyaGrid AI** — an AI District Health Operations Center.
 
-Authors: **Harsh Kawatra & Dayita Arora**
+Authors: **Harsh Kawatra, Dayita Arora, Gursimran Kaur & Anuj Gambhir**
 Context: GDG BuildWithAI hackathon, prototyping round.
 
 ## The Problem
