@@ -115,6 +115,21 @@ export const recommendations: Recommendation[] = [
     ],
     status: "approved",
   },
+  {
+    id: "rec_005",
+    type: "stock_transfer",
+    sourceFacilityId: "chc_north",
+    targetFacilityId: "phc_27",
+    subject: "Anti-Snake Venom (ASV)",
+    quantityOrDetail: "6 vials",
+    confidence: 52,
+    reasons: [
+      "Projected stock depletion in 2.0 days",
+      "Historical consumption trend for snakebite cases",
+      "CHC North has surplus, 48 km away — confidence lowered by distance",
+    ],
+    status: "pending",
+  },
 ];
 
 export const alerts: Alert[] = [
@@ -122,6 +137,8 @@ export const alerts: Alert[] = [
   { id: "al_2", facilityId: "phc_09", severity: "warning", title: "Bed occupancy trending to 96%", detail: "Next week's forecast breaches safe capacity for maternity ward." },
   { id: "al_3", facilityId: "phc_27", severity: "warning", title: "Doctor absence pattern detected", detail: "Dr. Meera Singh absent 5 consecutive Mondays — 38% patient delay risk." },
   { id: "al_4", facilityId: "phc_21", severity: "info", title: "X-Ray unit under maintenance", detail: "Nearest alternative: CHC North, 4 km away." },
+  { id: "al_5", facilityId: "phc_27", severity: "critical", title: "Anti-Snake Venom — 2 days remaining", detail: "Nearest surplus is 48 km away at CHC North; recommend expedited transfer today." },
+  { id: "al_6", facilityId: "phc_18", severity: "critical", title: "Adrenaline (Epinephrine) — 2.5 days remaining", detail: "No district surplus available for this crash-cart drug; flag for emergency procurement." },
 ];
 
 export const footfallForecast: ForecastPoint[] = [
@@ -152,7 +169,7 @@ export const districtKpis = {
   footfall: { value: 218, confidence: 91 },
   bedOccupancy: { value: "82%", nextWeek: "96%" },
   doctorsAbsent: { value: 1, detail: "Dr. Meera Singh, PHC Phagi" },
-  medicineRisk: { value: 2, detail: "SKUs below safety stock" },
+  medicineRisk: { value: 3, detail: "ORS, Adrenaline, ASV below safety stock" },
 };
 
 export function facilityById(id: string): Facility | undefined {
