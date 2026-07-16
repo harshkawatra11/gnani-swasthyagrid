@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "google-genai>=1.0",
+    "google-cloud-firestore>=2.16",
 ]
 
 [project.optional-dependencies]

@@ -9,9 +9,10 @@
 | Region | `asia-south1` |
 | Cloud Run service | `swasthyagrid-api` |
 | Backend URL | https://swasthyagrid-api-616415200021.asia-south1.run.app |
-| Firestore | Native mode, `asia-south1`, free tier (provisioned, not yet wired as the active data source — `DistrictRepository` still reads the seed JSON) |
-| Secret Manager | `gemini-api-key` secret exists, currently holding a **placeholder** value pending the real key |
+| Firestore | Native mode, `asia-south1` — **live source of truth**, shared with the SwasthyaGrid Intake CRM. `DistrictRepository` reads it with a ≤20s TTL and falls back to the bundled seed JSON if unreachable. |
+| Secret Manager | `gemini-api-key` — the real Gemini key, active |
 | Frontend | https://swasthyagrid.vercel.app (Vercel), `NEXT_PUBLIC_API_BASE` points at the Cloud Run URL above — verified via live network requests that the dashboard fetches real backend data in production |
+| Data source (CRM) | **[SwasthyaGrid Intake](https://swasthyagrid-crm.vercel.app)** ([repo](https://github.com/harshkawatra11/SwasthyaGrid-CRM)) — separate Next.js app, separate Vercel project, separate GitHub repo. Facility/admin logins write to the same Firestore project via the Firebase Admin SDK from a dedicated `crm-intake` service account (`roles/datastore.user` only). Firestore security rules are deployed **deny-all** for direct client access — every read/write goes through server-side API routes (CRM) or the Admin SDK service account (this backend). |
 
 To activate the live "Ask" feature on the backend, replace the placeholder secret:
 ```bash

@@ -34,15 +34,20 @@ Built for **GDG BuildWithAI 2025** · India's District Health Crisis, Solved.
 
 ## 🌐 Live Deployment
 
-> **This is not a mockup.** SwasthyaGrid AI is a fully functional, production-ready prototype deployed end-to-end on Google Cloud.
+> **This is not a mockup.** SwasthyaGrid AI is a fully functional, production-ready prototype deployed end-to-end on Google Cloud — including the facility data portal that feeds it.
 
 | Component | Technology | Status |
 | :--- | :--- | :--- |
 | **Frontend** | Next.js 15 on **Vercel** | 🟢 [swasthyagrid.vercel.app](https://swasthyagrid.vercel.app) |
 | **Backend API** | FastAPI on **Google Cloud Run** (asia-south1) | 🟢 [API Docs](https://swasthyagrid-api-616415200021.asia-south1.run.app/docs) |
+| **Data source** | **[SwasthyaGrid Intake](https://swasthyagrid-crm.vercel.app)** — facility CRM ([repo](https://github.com/harshkawatra11/SwasthyaGrid-CRM)) | 🟢 Role-based login, writes to shared **Firestore** |
 | **AI Intelligence** | **Gemini 2.5 Flash** (function calling) | 🟢 Live via `google-genai` SDK |
 | **Secrets** | **Google Secret Manager** | 🟢 Zero hardcoded secrets |
 | **Maps** | **Google Maps Places API** | 🟢 Nearest PHC routing |
+
+### Where does the data come from?
+
+Every PHC/CHC gets a login to **[SwasthyaGrid Intake](https://swasthyagrid-crm.vercel.app)** — a companion app, its own repo, its own Vercel deployment — where staff report medicine stock, bed occupancy, doctor attendance, and patient footfall each morning. Those writes land in a shared **Firestore** database (`swasthyagrid-ai-54886`). This backend's `DistrictRepository` reads that same Firestore on a short TTL (≤20s), so a facility's edit propagates into the forecast engine, the recommendation engine, and the district map here — live, with no redeploy. If Firestore is ever unreachable, the backend falls back to its bundled seed JSON so the console never breaks.
 
 ---
 
@@ -410,7 +415,8 @@ Every architectural decision was documented before a single line of code was wri
 
 ## 🚀 Roadmap
 
-- [ ] Firebase Authentication (JWT-based roles)
+- [x] Facility data portal with role-based login — **[SwasthyaGrid Intake](https://github.com/harshkawatra11/SwasthyaGrid-CRM)**, writing to a shared Firestore
+- [ ] Migrate CRM to Firebase Authentication + client-scoped security rules (currently server-only JWT sessions, since Identity Platform wasn't enabled)
 - [ ] Vertex AI for XGBoost stock-out forecasting
 - [ ] BigQuery for historical district analytics
 - [ ] WhatsApp bot for rural citizens (no smartphone required)

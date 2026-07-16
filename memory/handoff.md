@@ -11,18 +11,20 @@ If you're picking this up fresh, read in this order:
 - AI never auto-executes; recommendations always start `pending` (see `docs/07-recommendation-engine.md`).
 - Gemini (`gemini-2.5-flash`) explains, never predicts numbers.
 - No spending beyond GCP credits + Gemini free/AI-Studio tier — flag anything else before proceeding.
-- GitHub: public repo `harshkawatra11/SwasthyaGrid-gdg-buildwithai`, CI/CD is green.
-- Live site: **https://swasthyagrid.vercel.app** (Vercel project `swasthyagrid`, team `harsh-s-vercel-team`), git-connected for auto-deploy on push to `master`. Monorepo build config lives in the root `vercel.json` (builds `frontend/`) since the project's dashboard Root Directory setting couldn't be changed via CLI/MCP tooling.
-- Never extract or use stored CLI/tool auth tokens directly against an API — if a needed action has no proper CLI/MCP path, find a config-file-based workaround (as done for the Vercel monorepo root) or ask the user to do the one dashboard click.
+- GitHub: main app `harshkawatra11/SwasthyaGrid-gdg-buildwithai`, CI/CD green. CRM: `harshkawatra11/SwasthyaGrid-CRM`, separate repo, no CI configured.
+- Live sites: **https://swasthyagrid.vercel.app** (Vercel project `swasthyagrid`, team `gursimrannkaurr04` — a teammate's account, not `harsh-s-vercel-team` as earlier notes said; it moved at some point) and **https://swasthyagrid-crm.vercel.app** (Vercel project `swasthyagrid-crm`, same team). Neither has GitHub auto-deploy connected for the CRM (cross-account permissions); redeploy both via `vercel deploy --prod` from their respective folders.
+- Never extract or use stored CLI/tool auth tokens, service account keys, or session cookies directly to bypass a missing CLI/MCP feature or to debug — use hashes/lengths/status codes instead of printing secret values, and find a config-file-based workaround (e.g. the root `vercel.json` for the monorepo Root Directory issue) or ask the user to do the one dashboard click.
+- Service account keys live only in `ai-healthcare-crm/.secrets-tmp/` (gitignored) — never move them, never print their contents.
 
-## State as of end of Session 4 (current)
-Fully live, full-stack: frontend on Vercel (`swasthyagrid.vercel.app`), backend on Cloud Run (`https://swasthyagrid-api-616415200021.asia-south1.run.app`, project `swasthyagrid-ai-54886`), Firestore + Secret Manager provisioned. Verified via live network-request inspection that the production dashboard fetches real backend data, not mock fallback. No mentor-repo references anywhere. `pitch-deck.html` exists at the repo root.
+## State as of end of Session 5 (current)
+Two live, linked apps:
+- **SwasthyaGrid AI** — frontend on Vercel, backend on Cloud Run, now reading **live Firestore** (20s TTL, JSON-seed fallback preserved) instead of only the static seed.
+- **SwasthyaGrid Intake** (`ai-healthcare-crm/`) — a separate CRM app/repo/Vercel deploy where PHC/CHC staff log in and edit their facility's data, writing to the *same* Firestore project (`swasthyagrid-ai-54886`). Verified in production: an edit in the CRM shows up in SwasthyaGrid AI's API within the TTL window with a correctly recomputed risk level.
+
+Demo login credentials (Firestore `crm_users`, not committed anywhere): `phc-rural-14`, `phc-sector-12`, `chc-east` (facility role), `district-admin` (admin role) — shared password `Swasthya@2026`, printed by `node ai-healthcare-crm/scripts/seed-users.mjs`.
 
 ## What's still pending
-1. **Add the real Gemini key** in two places once you have it:
-   - Cloud Run backend: `printf '%s' 'KEY' | gcloud secrets versions add gemini-api-key --data-file=- --project=swasthyagrid-ai-54886` (no redeploy needed).
-   - Vercel's `/api/ask` route: `cd frontend && vercel env add GEMINI_API_KEY production`, then `vercel deploy --prod`.
-2. See `memory/next-tasks.md` for the fuller backlog (PHC Staff data-entry UI, real ML models, live Firestore wiring behind `DistrictRepository`, i18n, etc).
+See `memory/next-tasks.md` for the full backlog — nothing blocking for the demo. Two rough edges: the CRM's Vercel deploy isn't git-connected (manual `vercel deploy --prod` needed for future changes), and the CRM's doctor attendance toggle doesn't yet feed the backend's attendance-risk computation (that stays static from the seed).
 
 ## GCP project reference
-Project `swasthyagrid-ai-54886`, region `asia-south1`, billing account `010FBB-4DDDDA-4656C5`. To tear down if no longer needed: `gcloud projects delete swasthyagrid-ai-54886` (stops all billing for it).
+Project `swasthyagrid-ai-54886`, region `asia-south1`, billing account `010FBB-4DDDDA-4656C5`. Firestore is now load-bearing for **both** apps — tearing down the project (`gcloud projects delete swasthyagrid-ai-54886`) takes down the CRM's data too, not just the backend.

@@ -2,7 +2,10 @@
 
 | Date | Decision | Why |
 |---|---|---|
-| 2026-07-05 | Project named **SwasthyaGrid AI**, authors Harsh Kawatra & Dayita Arora | Sounds like infrastructure, not another chatbot |
+| 2026-07-05 | Project named **SwasthyaGrid AI**, authors Harsh Kawatra, Dayita Arora, Gursimran Kaur & Anuj Gambhir | Sounds like infrastructure, not another chatbot |
+| 2026-07-15 | CRM (SwasthyaGrid Intake) uses server-only JWT sessions (bcrypt + HS256 cookie), not Firebase Auth | Firebase Authentication/Identity Platform was not enabled on the GCP project and enabling it wasn't in scope the night before the finale; server-only auth with Firestore rules deployed deny-all achieves an equivalent (arguably stronger) security posture — see [[completed-tasks]] |
+| 2026-07-15 | Firestore is now the live shared source of truth between SwasthyaGrid AI and SwasthyaGrid Intake, with JSON-seed fallback preserved | Makes "where does the data come from" a real, demoable answer instead of a roadmap slide; the fallback keeps the existing demo safe if Firestore is ever unreachable |
+| 2026-07-15 | SwasthyaGrid Intake deployed via Vercel CLI without GitHub auto-deploy | The Vercel team linked (a teammate's account) lacks admin on the personal GitHub repo — same cross-account issue hit earlier with the main frontend. Deploys are CLI-triggered (`vercel deploy --prod`) rather than git-triggered until resolved |
 | 2026-07-05 | Repo: public, `harshkawatra11/SwasthyaGrid-gdg-buildwithai`, pushed via `gh` CLI | Judges need frictionless read access |
 | 2026-07-05 | Documentation-first workflow: `docs/` written before any code | Repository is single source of truth; enables handoff without conversation history |
 | 2026-07-05 | Monorepo: `frontend/` (Next.js) + `backend/` (FastAPI) | Keeps one repo for judges to browse while giving each layer a clean-architecture home |
