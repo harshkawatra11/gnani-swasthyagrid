@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   try {
     const genAI = new GoogleGenAI({ apiKey });
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash-lite",
       contents: message,
       config: { systemInstruction: CITIZEN_SYSTEM_PROMPT },
     });

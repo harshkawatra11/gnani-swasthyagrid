@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     environment: str = "local"
 
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
     google_maps_api_key: str | None = None
     use_vertex_ai: bool = False
     use_secret_manager: bool = False

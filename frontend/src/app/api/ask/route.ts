@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const genAI = new GoogleGenAI({ apiKey });
     const prompt = `DISTRICT DATA (JSON):\n${buildDataContext()}\n\nQuestion: ${message}`;
     const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash-lite",
       contents: prompt,
       config: { systemInstruction: SYSTEM_PROMPT },
     });
