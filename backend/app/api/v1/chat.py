@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import get_health_agent
 from app.agents.health_agent import HealthAgent
-from app.schemas.recommendation import AskRequest, AskResponse
+from app.api.deps import get_health_agent
 from app.core.config import get_settings
+from app.schemas.recommendation import AskRequest, AskResponse
 
 router = APIRouter(prefix="/api/v1", tags=["ask"])
 

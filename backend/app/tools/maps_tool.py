@@ -7,9 +7,9 @@ based on user GPS coordinates.
 
 from __future__ import annotations
 
+import logging
 import math
 
-import logging
 import httpx
 from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -69,19 +69,18 @@ def find_nearby_phc(
                 f"Maps API HTTP request failed. Retrying... attempt={retry_state.attempt_number}"
             ),
         ):
-            with attempt:
-                with httpx.Client(timeout=10.0) as client:
-                    response = client.get(
-                        PLACES_NEARBY_URL,
-                        params={
-                            "location": f"{latitude},{longitude}",
-                            "radius": radius_meters,
-                            "keyword": "primary health centre PHC hospital",
-                            "key": api_key,
-                        },
-                    )
-                    response.raise_for_status()
-                    data = response.json()
+            with attempt, httpx.Client(timeout=10.0) as client:
+                response = client.get(
+                    PLACES_NEARBY_URL,
+                    params={
+                        "location": f"{latitude},{longitude}",
+                        "radius": radius_meters,
+                        "keyword": "primary health centre PHC hospital",
+                        "key": api_key,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
 
         if data.get("status") not in ("OK", "ZERO_RESULTS"):
             raise MapsAPIException(f"Maps API returned status: {data.get('status')}")

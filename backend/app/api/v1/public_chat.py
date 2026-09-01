@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_public_agent
-from app.schemas.recommendation import AskRequest, AskResponse
 from app.core.config import get_settings
+from app.schemas.recommendation import AskRequest, AskResponse
 
 router = APIRouter(prefix="/api/v1", tags=["Citizen Services"])
 

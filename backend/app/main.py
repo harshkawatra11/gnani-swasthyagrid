@@ -1,11 +1,12 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import logging
 
-from app.api.v1 import chat, health, routes, public_chat
+from app.api.v1 import chat, health, public_chat, routes
 from app.core.config import get_settings
-from app.core.exceptions import SwasthyaGridError, FacilityNotFoundError
+from app.core.exceptions import FacilityNotFoundError, SwasthyaGridError
 from app.core.logging import setup_logging
 
 logger = logging.getLogger("swasthyagrid")
@@ -47,7 +48,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(SwasthyaGridError)
     async def swasthyagrid_error_handler(request: Request, exc: SwasthyaGridError):
-        logger.error(f"Domain error: {str(exc)}")
+        logger.error(f"Domain error: {exc!s}")
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     app.include_router(health.router)
