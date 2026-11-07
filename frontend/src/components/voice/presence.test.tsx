@@ -33,6 +33,8 @@ function baseState(over: Partial<VoiceState> = {}): VoiceState {
     muted: false,
     sttMode: null,
     ttsMode: null,
+    stack: null,
+    lastLlm: null,
     metrics: { turns: 0, medianFirstAudioMs: null, lastFirstAudioMs: null },
     errorMessage: null,
     ...over,

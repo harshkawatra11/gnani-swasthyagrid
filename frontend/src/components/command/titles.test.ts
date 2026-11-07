@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DistrictSummaryRow, FacilityMatrix, MedicineMatrix, ShipmentSummary, StateSummary, VolumeSeries } from "@/lib/api/types";
 import {
   breachCount,
+  briefingLabel,
   dimensionBins,
   executiveBlock,
   facilityMatrixTitle,
@@ -154,6 +155,16 @@ describe("medicine title", () => {
   });
   it("says so when nothing is under threshold", () => {
     expect(medicineTitle({ ...med, cells: [] })).toMatch(/No emergency medicine/);
+  });
+});
+
+describe("briefingLabel", () => {
+  it("names the model that produced the briefing", () => {
+    expect(briefingLabel(null)).toBe("AI briefing");
+    expect(briefingLabel({ model: "template" } as never)).toBe("Automatic summary");
+    expect(briefingLabel({ model: "gnani-evon-v3.3" } as never)).toBe("AI briefing · Gnani Evon v3.3");
+    expect(briefingLabel({ model: "gemini-3.5-flash-lite" } as never)).toBe("AI briefing · Gemini");
+    expect(briefingLabel({ model: "some-other-model" } as never)).toBe("AI briefing");
   });
 });
 

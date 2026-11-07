@@ -361,7 +361,10 @@ export function lastEvents(items: TimelineItem[], limit = 20): TimelineItem[] {
 
 export function briefingLabel(b: Briefing | null | undefined): string {
   if (!b) return "AI briefing";
-  return b.model === "template" ? "Automatic summary" : "AI briefing";
+  if (b.model === "template") return "Automatic summary";
+  if (b.model?.startsWith("gnani-evon")) return "AI briefing · Gnani Evon v3.3";
+  if (b.model?.startsWith("gemini")) return "AI briefing · Gemini";
+  return "AI briefing";
 }
 
 /* ---------- moneyshot ---------- */

@@ -107,8 +107,9 @@ export function VoicePage() {
         <Metric label="Turns" value={fmtInt(state.metrics.turns)} />
         <Metric label="Median first audio" value={ms(state.metrics.medianFirstAudioMs)} />
         <Metric label="Last first audio" value={ms(state.metrics.lastFirstAudioMs)} />
-        <Metric label="STT mode" value={state.sttMode ?? "-"} />
-        <Metric label="TTS mode" value={state.ttsMode ?? "-"} />
+        <Metric label="Speech-to-text" value={state.stack?.stt ?? "-"} />
+        <Metric label="Voice" value={state.stack?.tts ?? "-"} />
+        <Metric label="Answered by" value={state.lastLlm ?? state.stack?.llm ?? "-"} />
         <Metric label="Language" value={LANGUAGES.find((l) => l.value === state.language)?.label ?? state.language} />
       </div>
       <p className="text-[11px] leading-tight text-muted">{FOOTER_NOTE}</p>

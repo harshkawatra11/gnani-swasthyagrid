@@ -112,7 +112,14 @@ async function rig(opts: { mic?: boolean; micFails?: boolean } = {}): Promise<Ri
   return { client, socket, playback: () => playback, micFrame: (b) => onFrame(b), micEnabled: () => enabled, logs };
 }
 
-const ready: ServerFrame = { t: "ready", sttMode: "ws", ttsMode: "ws", protocol: 2, speaker: "shubh" };
+const ready: ServerFrame = {
+  t: "ready",
+  sttMode: "ws",
+  ttsMode: "ws",
+  protocol: 2,
+  speaker: "Nalini",
+  stack: { stt: "Gnani Prisma v2.5", tts: "Gnani Timbre v2.5 · Nalini", llm: "Gnani Evon v3.3" },
+};
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -378,6 +385,18 @@ describe("assistant lines", () => {
       socket.push({ t: "turn_end", turnId: `t${i}`, metrics: { finalToFirstAudioMs: ms } });
     }
     expect(client.getSnapshot().metrics).toEqual({ turns: 3, medianFirstAudioMs: 1200, lastFirstAudioMs: 1200 });
+  });
+
+  it("updates lastLlm from turn_end metrics", async () => {
+    const { client, socket } = await rig();
+    expect(client.getSnapshot().lastLlm).toBeNull();
+    socket.push({ t: "turn_end", turnId: "t1", metrics: { llm: "Gnani Evon v3.3" } });
+    expect(client.getSnapshot().lastLlm).toBe("Gnani Evon v3.3");
+    socket.push({ t: "turn_end", turnId: "t2", metrics: { llm: "Google gemini-3.5-flash-lite (Evon fallback)" } });
+    expect(client.getSnapshot().lastLlm).toBe("Google gemini-3.5-flash-lite (Evon fallback)");
+    // A turn whose metrics carry no llm field keeps the last known one.
+    socket.push({ t: "turn_end", turnId: "t3", metrics: {} });
+    expect(client.getSnapshot().lastLlm).toBe("Google gemini-3.5-flash-lite (Evon fallback)");
   });
 
   it("shows an error frame and closes on a fatal one", async () => {

@@ -45,6 +45,8 @@ function baseState(over: Partial<VoiceState> = {}): VoiceState {
     muted: false,
     sttMode: null,
     ttsMode: null,
+    stack: null,
+    lastLlm: null,
     metrics: { turns: 0, medianFirstAudioMs: null, lastFirstAudioMs: null },
     errorMessage: null,
     ...over,
@@ -70,6 +72,19 @@ describe("VoicePage", () => {
     expect(screen.getByTestId("metrics-strip")).toHaveTextContent("Median first audio");
     expect(screen.getByText(/only from live SwasthyaGrid data/)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Suggested prompts" }).querySelectorAll("button")).toHaveLength(6);
+  });
+
+  it("shows the Gnani stack and the answering model in the metrics strip", () => {
+    api.state = baseState({
+      stack: { stt: "Gnani Prisma v2.5", tts: "Gnani Timbre v2.5 · Nalini", llm: "Gnani Evon v3.3" },
+      lastLlm: "Google gemini-3.5-flash-lite (Evon fallback)",
+    });
+    render(<VoicePage />);
+    const strip = screen.getByTestId("metrics-strip");
+    expect(strip).toHaveTextContent("Gnani Prisma v2.5");
+    expect(strip).toHaveTextContent("Gnani Timbre v2.5 · Nalini");
+    // lastLlm (the model that actually answered the most recent turn) wins over the stack's default.
+    expect(strip).toHaveTextContent("Google gemini-3.5-flash-lite (Evon fallback)");
   });
 
   it("the mic button starts a session inside the click", async () => {

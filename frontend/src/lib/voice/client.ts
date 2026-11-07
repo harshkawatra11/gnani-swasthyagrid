@@ -10,6 +10,7 @@ import {
   type TranscriptLine,
   type VoiceLanguage,
   type VoiceMode,
+  type VoiceStack,
 } from "./protocol";
 
 export type VoiceStatus = "idle" | "connecting" | "connected" | "failed";
@@ -25,6 +26,8 @@ export interface VoiceState {
   muted: boolean;
   sttMode: "ws" | "typed" | null;
   ttsMode: "ws" | "rest" | null;
+  stack: VoiceStack | null;
+  lastLlm: string | null;
   metrics: { turns: number; medianFirstAudioMs: number | null; lastFirstAudioMs: number | null };
   errorMessage: string | null;
 }
@@ -128,6 +131,8 @@ export class VoiceClient {
     muted: false,
     sttMode: null,
     ttsMode: null,
+    stack: null,
+    lastLlm: null,
     metrics: { turns: 0, medianFirstAudioMs: null, lastFirstAudioMs: null },
     errorMessage: null,
   };
@@ -434,6 +439,7 @@ export class VoiceClient {
         this.set({
           sttMode: frame.sttMode === "ws" ? "ws" : "typed",
           ttsMode: frame.ttsMode ?? null,
+          stack: frame.stack ?? null,
           phase: this.state.phase === "idle" ? "listening" : this.state.phase,
         });
         break;
@@ -543,6 +549,7 @@ export class VoiceClient {
     if (typeof ms === "number") this.firstAudioMs.push(ms);
     this.set({
       thinkingLabel: null,
+      lastLlm: frame.metrics?.llm ?? this.state.lastLlm,
       metrics: {
         turns: this.state.metrics.turns + 1,
         medianFirstAudioMs: median(this.firstAudioMs),

@@ -58,10 +58,25 @@ export interface TurnMetrics {
   finalToFirstAudioMs?: number | null;
   totalMs?: number | null;
   tools?: string[];
+  llm?: string | null;
+}
+
+export interface VoiceStack {
+  stt: string;
+  tts: string;
+  llm: string;
 }
 
 export type ServerFrame =
-  | { t: "ready"; sessionId?: string; sttMode: "ws" | "typed" | "rest"; ttsMode?: "ws" | "rest"; protocol?: number; speaker?: string }
+  | {
+      t: "ready";
+      sessionId?: string;
+      sttMode: "ws" | "typed" | "rest";
+      ttsMode?: "ws" | "rest";
+      protocol?: number;
+      speaker?: string;
+      stack?: VoiceStack;
+    }
   | { t: "vad"; state: "start" | "end" }
   | { t: "partial"; text: string }
   | { t: "final"; text: string; turnId: string; language?: string; clientTurnId?: string }
