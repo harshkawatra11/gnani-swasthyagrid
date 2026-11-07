@@ -1,4 +1,4 @@
-"""System prompt for the Sarvam voice agent (voice v2, plan section 7.7).
+"""System prompt for the voice agent's LLM (Evon or Gemini through the OpenAI-compatible router) (voice v2, plan section 7.7).
 
 Separate from the typed-Ask SYSTEM_PROMPT in system_prompt.py: a spoken
 answer has different rules than a written one. The per-turn context note

@@ -1,8 +1,9 @@
 """Situation briefing (6.2).
 
-A Sarvam chat completion (non-streaming, `reasoning_effort: null`, temperature 0.3,
-max_tokens 400) turns the compact state summary into a two sentence situation paragraph
-plus three to five bullets. Any failure, a missing key, or a reply that mentions a number
+A non-streaming chat completion (temperature 0.3, max_tokens 400) through the LLM
+router (Gnani Evon v3.3 when EVON_BASE_URL is configured, else Gemini) turns the
+compact state summary into a two sentence situation paragraph plus three to five
+bullets. Any failure, no configured provider, or a reply that mentions a number
 absent from the summary falls back to a deterministic template built from the same
 numbers. Results are cached for 10 real minutes per (scope, repo version, sim time floor
 to 30 minutes).
@@ -16,11 +17,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-import httpx
-
 logger = logging.getLogger("swasthyagrid")
 
-SARVAM_CHAT_URL = "https://api.sarvam.ai/v1/chat/completions"
 CACHE_SECONDS = 600.0
 MAX_BULLETS = 5
 MIN_BULLETS = 3
@@ -138,52 +136,39 @@ class BriefingService:
         settings,
         repo,
         logistics,
+        router=None,
         clock: Callable[[], float] = time.monotonic,
     ):
         self.settings = settings
         self.repo = repo
         self.logistics = logistics
+        if router is None:
+            from app.llm.router import build_router
+
+            router = build_router(settings)
+        self.router = router
         self._clock = clock
         self._cache: dict[tuple, tuple[float, dict]] = {}
 
-    # ------------------------------------------------------------------ Sarvam
+    # ------------------------------------------------------------------ LLM
 
-    def _post(self, payload: dict) -> dict:
-        res = httpx.post(
-            SARVAM_CHAT_URL,
-            headers={
-                "api-subscription-key": self.settings.sarvam_api_key,
-                "content-type": "application/json",
-            },
-            json=payload,
-            timeout=20.0,
-        )
-        if res.status_code != 200:
-            raise RuntimeError(f"Sarvam chat completion failed ({res.status_code})")
-        return res.json()
-
-    def _payload(self, summary: dict) -> dict:
+    def _messages(self, summary: dict) -> list[dict[str, str]]:
         facts = json.dumps(_plain(summary), separators=(",", ":"))
-        return {
-            "model": self.settings.sarvam_chat_model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"State summary JSON:\n{facts}"},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 400,
-            "reasoning_effort": None,
-            "stream": False,
-        }
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"State summary JSON:\n{facts}"},
+        ]
 
-    def sarvam_reply(self, summary: dict) -> str:
-        data = self._post(self._payload(summary))
-        return data["choices"][0]["message"].get("content") or ""
+    def llm_reply(self, summary: dict) -> tuple[str, str]:
+        """Returns (reply text, model id of whichever provider answered)."""
+        result, provider = self.router.complete_sync(messages=self._messages(summary), max_tokens=400, temperature=0.3)
+        return result.content or "", provider.model
 
     def _generate(self, summary: dict, now: datetime) -> dict:
-        if self.settings.sarvam_api_key:
+        if self.router.configured:
             try:
-                parsed = parse_reply(self.sarvam_reply(summary))
+                reply, model = self.llm_reply(summary)
+                parsed = parse_reply(reply)
                 if parsed is None:
                     raise ValueError("reply did not have a paragraph and bullets")
                 text, bullets = parsed
@@ -194,7 +179,7 @@ class BriefingService:
                     "text": text,
                     "bullets": bullets,
                     "generated_at": now,
-                    "model": self.settings.sarvam_chat_model,
+                    "model": model,
                     "cached": False,
                 }
             except Exception as exc:

@@ -39,7 +39,7 @@ def _origin_allowed(origin: str | None, settings: Settings) -> bool:
         # Non-browser clients (curl, a test harness) send no Origin header at
         # all; only browser-originated cross-origin requests carry one.
         return True
-    allowed: set[str] = {"https://swasthyagrid.vercel.app"}
+    allowed: set[str] = set(settings.frontend_origins)
     for configured in settings.cors_origins:
         allowed.add(configured)
         # A local dev server is reachable as both "localhost" and

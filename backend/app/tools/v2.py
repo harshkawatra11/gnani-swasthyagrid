@@ -1,4 +1,4 @@
-"""Tool set v2: 13 tools shared by the Gemini typed agent and the Sarvam voice agent.
+"""Tool set v2: 13 tools shared by the Gemini typed agent and the voice agent's LLM (Evon or Gemini through the OpenAI-compatible router).
 
 Every tool accepts spoken names as well as ids (resolvers in `resolve.py`) and
 returns a `ToolResult`. Only `ToolResult.llm` is shown to the model: compact,

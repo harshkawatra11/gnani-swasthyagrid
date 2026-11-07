@@ -102,7 +102,7 @@ def main() -> int:
     for template, url in targets:
         times: list[float] = []
         codes: set[int] = set()
-        for _ in range(args.warmup):  # fill per-endpoint caches (the briefing calls Sarvam once)
+        for _ in range(args.warmup):  # fill per-endpoint caches (the briefing calls the LLM once)
             fetch(base + url)
         for _ in range(args.n):
             code, ms, _ = fetch(base + url)

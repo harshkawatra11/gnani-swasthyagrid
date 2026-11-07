@@ -1,4 +1,4 @@
-"""Shared fakes for the voice session tests. Sarvam is never called."""
+"""Shared fakes for the voice session tests. No live LLM or Gnani calls."""
 
 import asyncio
 import base64
@@ -6,10 +6,12 @@ from typing import Any
 
 from app.api import deps
 from app.core.config import get_settings
+from app.llm import client as llm_client
+from app.llm.client import ChatDelta
+from app.llm.router import LlmRouter, build_providers
 from app.tools.v2 import ToolResult
-from app.voice import sarvam_chat, sarvam_tts
-from app.voice.sarvam_chat import ChatDelta
-from app.voice.sarvam_tts_ws import AudioChunk
+from app.voice import gnani_tts
+from app.voice.gnani_tts import AudioChunk
 from app.voice.session import VoiceSession
 
 PCM_B64 = base64.b64encode(b"\x01\x00" * 480).decode()
@@ -27,7 +29,7 @@ def tool_delta(name: str, args: str = "{}", call_id: str = "call_1", index: int 
 
 
 class ChatScript:
-    """Stands in for `sarvam_chat.stream_chat`. Each call consumes one response:
+    """Stands in for `llm_client.stream_chat`. Each call consumes one response:
     a list of ChatDelta, an Exception (raised), a float (sleep) or an Event (wait)."""
 
     def __init__(self, *responses: list[Any] | Exception):
@@ -74,6 +76,9 @@ class FakeTts:
         self._on_audio = None
         self._seq = 0
 
+    def voice_for(self, language):
+        return "Kaveri" if language in (None, "en-IN") else "Nalini"
+
     async def begin_turn(self, language, on_audio):
         self.begun += 1
         self.language = language
@@ -115,9 +120,16 @@ class Frames:
 def make_session(tools=None, tts="default", speak=True, clock=None, sleep=None, **overrides) -> tuple[VoiceSession, Frames, FakeTts | None]:
     frames = Frames()
     settings = get_settings().model_copy(
-        update={"sarvam_api_key": "test-key", "sarvam_stream_with_tools": True, **overrides}
+        update={
+            "gnani_api_key": "test-key",
+            "gemini_api_key": "test-key",
+            "evon_base_url": None,
+            "llm_stream_with_tools": True,
+            **overrides,
+        }
     )
     fake_tts = FakeTts() if tts == "default" else tts
+    router = LlmRouter(build_providers(settings))
     session = VoiceSession(
         settings=settings,
         district=deps.get_district_service(),
@@ -127,6 +139,7 @@ def make_session(tools=None, tts="default", speak=True, clock=None, sleep=None, 
         protocol=2,
         tools=tools,
         tts=fake_tts,
+        llm=router,
         speak=speak,
         **({"clock": clock} if clock else {}),
         **({"sleep": sleep} if sleep else {}),
@@ -157,8 +170,8 @@ def district_tool(name: str = "Kota") -> ToolResult:
     )
 
 
-def wav_synthesis() -> sarvam_tts.WavSynthesis:
-    return sarvam_tts.WavSynthesis(wav_base64=PCM_B64, sample_rate_hz=24000)
+def wav_synthesis() -> gnani_tts.WavSynthesis:
+    return gnani_tts.WavSynthesis(wav_base64=PCM_B64, sample_rate_hz=24000)
 
 
 __all__ = [
@@ -166,9 +179,9 @@ __all__ = [
     "FakeTts",
     "Frames",
     "district_tool",
+    "llm_client",
     "make_session",
     "run_typed",
-    "sarvam_chat",
     "text_delta",
     "tool_delta",
     "wav_synthesis",

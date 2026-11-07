@@ -1,17 +1,17 @@
 """Text-only accuracy eval for the voice agent (plan 7.9/7.10, B9).
 
 Drives a real `VoiceSession` directly in process: no server, no websocket, a
-fake frame sender in place of the transport. Sarvam chat is real (the .env
-key). The district, forecast, recommendation, logistics and insights services
-are the real ones from `app.api.deps`, so ground truth is live data, not a
-fixture.
+fake frame sender in place of the transport. The LLM call is real (Evon v3.3
+when EVON_BASE_URL is set, else Gemini; the .env key). The district, forecast,
+recommendation, logistics and insights services are the real ones from
+`app.api.deps`, so ground truth is live data, not a fixture.
 
 Every case in `voice_cases.yaml` is one typed turn. The runner never hard
 codes an expected answer: for the "grounded" check it re-calls the same tool
 function with the arguments the model actually chose, and only then checks
 the reply shares real content with that live result.
 
-Budget: at most 2 full runs (about 240 Sarvam chat calls total across this
+Budget: at most 2 full runs (about 240 LLM chat calls total across this
 and the B8 latency probe). Run from backend/ so `.env` is found:
 
     python -m evals.voice_eval
@@ -329,8 +329,13 @@ def load_cases(only: list[str] | None) -> list[dict[str, Any]]:
 
 async def main_async(only: list[str] | None) -> int:
     settings = get_settings()
-    if not settings.sarvam_api_key:
-        print("SARVAM_API_KEY is not set (backend/.env); aborting.")
+    if not settings.gnani_api_key:
+        print("GNANI_API_KEY is not set (backend/.env); aborting.")
+        return 2
+    from app.api import deps as _deps
+
+    if not _deps.get_llm_router().configured:
+        print("No LLM is configured (set EVON_BASE_URL or GEMINI_API_KEY in backend/.env); aborting.")
         return 2
 
     cases = load_cases(only)

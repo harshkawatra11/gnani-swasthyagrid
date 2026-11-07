@@ -1,6 +1,6 @@
 """Export the offline fixtures the frontend hooks fall back to (plan 9.1, task A10).
 
-Runs the real app in process (no network, no Sarvam, seed data, tick loop off) with the
+Runs the real app in process (no network, no live LLM/voice calls, seed data, tick loop off) with the
 simulation clock frozen at scenario start + 2 hours, calls every hook endpoint for scope
 `all`, validates each body with its pydantic model where one exists, and writes
 `frontend/src/data/fixtures/<path with /api/v1/ removed and / replaced by __>.json`.
@@ -22,7 +22,8 @@ os.environ.update(
     {
         "DATA_SOURCE": "seed",
         "LOGISTICS_TICK": "false",
-        "SARVAM_API_KEY": "",
+        "GNANI_API_KEY": "",
+        "EVON_BASE_URL": "",
         "GEMINI_API_KEY": "",
         "LOGISTICS_STATE_PATH": str(Path(tempfile.mkdtemp()) / "state.json"),
     }

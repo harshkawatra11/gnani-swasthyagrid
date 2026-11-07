@@ -4,6 +4,7 @@ from fastapi import Request
 
 from app.agents.health_agent import HealthAgent
 from app.core.config import get_settings
+from app.llm.router import LlmRouter, build_router
 from app.logistics.service import LogisticsService, build_logistics_service
 from app.logistics.stream import StreamHub
 from app.repositories.district_repository import get_district_repository
@@ -76,10 +77,17 @@ def get_logistics_service(request: Request = None) -> LogisticsService:
 
 
 @lru_cache
+def get_llm_router() -> LlmRouter:
+    """Shared across every voice session and the briefing service so a failed
+    provider's cooldown (app.llm.router.LlmRouter) is not re-learned per session."""
+    return build_router(get_settings())
+
+
+@lru_cache
 def get_briefing_service():
     from app.services.briefing_service import BriefingService
 
-    return BriefingService(get_settings(), get_district_repository(), get_logistics_service())
+    return BriefingService(get_settings(), get_district_repository(), get_logistics_service(), get_llm_router())
 
 
 @lru_cache

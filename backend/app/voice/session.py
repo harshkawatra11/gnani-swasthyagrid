@@ -7,6 +7,10 @@ sentence segmenter into a TTS stream, and reports metrics in `turn_end`.
 
 Every tool call runs against the same services layer the typed Ask endpoint
 uses (see app.tools.v2), so a spoken and a typed answer can never disagree.
+
+The LLM is Gnani Evon v3.3 when EVON_BASE_URL is configured, falling back to
+Gemini through its OpenAI-compatible endpoint (see app.llm.router). Voice is
+Gnani Prisma v2.5 (STT) and Timbre v2.5 (TTS), both on the Vachana API.
 """
 
 import asyncio
@@ -20,9 +24,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
+import httpx
 from fastapi import WebSocketDisconnect
 
 from app.core.config import Settings
+from app.llm.client import LlmHTTPError, ToolCallAccumulator
+from app.llm.router import LlmRouter
 from app.prompts.voice_prompt import voice_system_prompt
 from app.services.district_service import DistrictService
 from app.services.forecast_service import ForecastService
@@ -30,9 +37,8 @@ from app.services.recommendation_service import RecommendationService
 from app.tools.resolve import resolve_district, resolve_facility
 from app.tools.schemas import TOOL_SCHEMAS
 from app.tools.v2 import ToolResult, build_tool_functions, tool_label
-from app.voice import fillers, sarvam_chat, sarvam_stt
-from app.voice.sarvam_chat import ToolCallAccumulator
-from app.voice.sarvam_tts_ws import AudioChunk, TtsStream
+from app.voice import fillers, gnani_stt
+from app.voice.gnani_tts import AudioChunk, TtsStream
 from app.voice.segmenter import SentenceSegmenter
 from app.voice.speech import choose_language, fallback_text, prepare_speech
 from app.voice.turns import Turn, TurnController
@@ -66,9 +72,21 @@ ERROR_MESSAGES = {
     "tool_error": "A data lookup failed. Please try again.",
     "tts_timeout": "Speech output timed out. The answer is shown as text.",
     "tts_error": "Speech output failed. The answer is shown as text.",
-    "no_key": "Voice agent is unavailable: SARVAM_API_KEY is not configured on the server.",
+    "no_key": "Voice agent is unavailable: no LLM is configured on the server (set EVON_BASE_URL or GEMINI_API_KEY).",
+    "no_voice_key": "Speech is unavailable: GNANI_API_KEY is not configured. Typed questions still work.",
     "internal": "Something went wrong on this turn.",
 }
+
+STACK_LABELS = {
+    "prisma-v2.5": "Gnani Prisma v2.5",
+    "prisma-v3.0": "Gnani Prisma v3.0",
+    "timbre-v2.5": "Gnani Timbre v2.5",
+    "timbre-v3.0": "Gnani Timbre v3.0",
+}
+
+
+def _label(model: str) -> str:
+    return STACK_LABELS.get(model, model)
 
 
 class Sender(Protocol):
@@ -137,6 +155,7 @@ class VoiceSession:
     mode: str = "handsfree"
     speak: bool = True
     tts: TtsStream | None = None
+    llm: LlmRouter | None = None
     logistics: Any = None
     insights: Any = None
     tools: dict[str, Callable[..., ToolResult]] | None = None  # test injection
@@ -152,6 +171,10 @@ class VoiceSession:
         self._tools = self.tools or build_tool_functions(
             self.district, self.forecast, self.recommendation, self.logistics, self.insights
         )
+        if self.llm is None:
+            from app.api import deps
+
+            self.llm = deps.get_llm_router()
         self.turns = TurnController(
             self._run_turn_v2, on_cancel=self._on_turn_cancelled, clock=self.clock
         )
@@ -179,13 +202,20 @@ class VoiceSession:
 
         await self._open_stt()
         real_tts = False
-        if self.speak and self.tts is None and self.settings.sarvam_api_key:
+        if self.speak and self.tts is None and self.settings.gnani_api_key:
             real_tts = True
             self.tts = TtsStream(
-                api_key=self.settings.sarvam_api_key,
-                model=self.settings.sarvam_tts_model,
-                speaker=self.settings.sarvam_speaker,
-                mode=self.settings.sarvam_tts_mode,
+                api_key=self.settings.gnani_api_key,
+                model=self.settings.gnani_tts_model,
+                voices={
+                    "en-IN": self.settings.gnani_tts_voice_en,
+                    "hi-IN": self.settings.gnani_tts_voice_hi,
+                },
+                mode=self.settings.gnani_tts_mode,
+                sample_rate=self.settings.gnani_tts_sample_rate,
+                speed=self.settings.gnani_tts_speed,
+                ws_url=self.settings.gnani_tts_ws_url,
+                rest_url=self.settings.gnani_tts_rest_url,
             )
         await self._send(self._ready_frame())
         if real_tts:
@@ -198,16 +228,20 @@ class VoiceSession:
     def _prewarm_fillers(self) -> None:
         """Synthesize both filler clips in the background so the first tool turn
         can play one within its budget. Only when start() built the real TTS stream."""
-        if not self.settings.sarvam_api_key:
+        if not self.settings.gnani_api_key or self.tts is None:
             return
 
         async def warm() -> None:
+            # Give the greeting's own TTS request time to finish first: Gnani
+            # allows only one active TTS request per key.
+            await asyncio.sleep(3.0)
+            assert self.tts is not None
             for language in ("en-IN", "hi-IN"):
                 try:
                     await fillers.get_filler(
-                        api_key=self.settings.sarvam_api_key or "",
-                        speaker=self.settings.sarvam_speaker,
-                        model=self.settings.sarvam_tts_model,
+                        api_key=self.settings.gnani_api_key or "",
+                        voice=self.tts.voice_for(language),
+                        model=self.settings.gnani_tts_model,
                         language=language,
                     )
                 except Exception:
@@ -216,18 +250,20 @@ class VoiceSession:
         self._prewarm_task = asyncio.get_running_loop().create_task(warm())
 
     async def _open_stt(self) -> None:
-        if self.settings.sarvam_api_key:
+        if self.settings.gnani_api_key:
             try:
-                self._stt_handle = await sarvam_stt.open_stt_socket(
-                    api_key=self.settings.sarvam_api_key,
+                self._stt_handle = await gnani_stt.open_stt_socket(
+                    api_key=self.settings.gnani_api_key,
                     language=self.language,
-                    model=self.settings.sarvam_stt_model,
+                    model=self.settings.gnani_stt_model,
+                    fmt=self.settings.gnani_stt_format,
+                    url=self.settings.gnani_stt_ws_url,
                     on_event=self._on_stt_event,
                     on_failed=self._on_stt_failed,
                 )
                 self._stt_mode = "ws"
             except Exception:
-                logger.exception("Failed to open Sarvam STT socket, degrading to typed mode")
+                logger.exception("Failed to open Gnani STT socket, degrading to typed mode")
                 self._stt_mode = "rest"
         else:
             self._stt_mode = "rest"
@@ -239,7 +275,16 @@ class VoiceSession:
             "sttMode": self._stt_mode,
             "ttsMode": self.tts.mode if self.tts is not None else "rest",
             "protocol": 2,
-            "speaker": self.settings.sarvam_speaker,
+            "speaker": self.tts.voice_for(self.language) if self.tts is not None else None,
+            "stack": {
+                "stt": _label(self.settings.gnani_stt_model) if self._stt_mode == "ws" else "typed input",
+                "tts": (
+                    f"{_label(self.settings.gnani_tts_model)} · {self.tts.voice_for(self.language)}"
+                    if self.tts is not None
+                    else "off"
+                ),
+                "llm": (self.llm.primary_label if self.llm is not None else None) or "not configured",
+            },
         }
 
     # ------------------------------------------------------------ guarded send
@@ -264,20 +309,23 @@ class VoiceSession:
     # ------------------------------------------------------------------ STT
 
     async def _on_stt_event(self, event: dict[str, Any]) -> None:
-        ev = sarvam_stt.parse_stt_event(event)
+        ev = gnani_stt.parse_stt_event(event)
         if ev.kind == "vad_start":
             await self._send({"t": "vad", "state": "start"})
             self.turns.on_speech_start()
         elif ev.kind == "vad_end":
             await self._send({"t": "vad", "state": "end"})
-        elif ev.kind == "partial":
+        elif ev.kind == "final":
+            # Gnani sends no partial transcripts: the final transcript is both
+            # the instant text shown to the officer and the signal that confirms
+            # an armed barge-in (turns.py still enforces a minimum word count and
+            # the 400ms echo guard).
             await self._send({"t": "partial", "text": ev.text})
             await self.turns.on_partial(ev.text)
-        elif ev.kind == "final":
             language = choose_language(self.language, stt_language=ev.language, text=ev.text)
             self.turns.on_final(ev.text, language)
-        elif ev.kind == "error" and ev.fatal:
-            await self._degrade_stt(f"fatal STT error: {ev.message}")
+        elif ev.kind == "error":
+            await self._degrade_stt(f"STT error: {ev.message}")
 
     async def _on_stt_failed(self) -> None:
         await self._degrade_stt("STT reconnect attempts exhausted")
@@ -374,8 +422,10 @@ class VoiceSession:
     def _classify(exc: BaseException) -> str:
         if isinstance(exc, TimeoutError):
             return "llm_timeout"
-        if isinstance(exc, sarvam_chat.SarvamHTTPError):
+        if isinstance(exc, LlmHTTPError):
             return "llm_busy" if exc.status_code in RETRY_STATUSES else "llm_error"
+        if isinstance(exc, httpx.TransportError):
+            return "llm_error"
         if isinstance(exc, ToolFailure):
             return "tool_error"
         return "internal"
@@ -395,7 +445,7 @@ class VoiceSession:
         self.history.append({"role": "user", "content": turn.text})
         turn.meta["user_logged"] = True
 
-        if not self.settings.sarvam_api_key:
+        if self.llm is None or not self.llm.configured:
             await self._send_error(turn, "no_key", fatal=True)
             return
 
@@ -406,7 +456,7 @@ class VoiceSession:
         self._arm_filler(run)
 
         turn_msgs: list[dict[str, Any]] = []
-        stream_planning = bool(self.settings.sarvam_stream_with_tools)
+        stream_planning = bool(self.settings.llm_stream_with_tools)
         content, calls = await self._call_llm(
             run, self._messages(turn_msgs), tool_choice="auto", stream=stream_planning
         )
@@ -472,10 +522,10 @@ class VoiceSession:
                     if stream:
                         return await self._stream_once(run, messages, tool_choice)
                     return await self._complete_once(run, messages)
-            except sarvam_chat.SarvamHTTPError as exc:
+            except LlmHTTPError as exc:
                 if attempt == 0 and self._retryable(exc) and self.turns.is_current(run.turn):
                     delay = DEFAULT_RETRY_DELAY_S if exc.retry_after is None else exc.retry_after
-                    logger.info("retrying Sarvam chat after HTTP %s in %.1fs", exc.status_code, delay)
+                    logger.info("retrying LLM chat after HTTP %s in %.1fs", exc.status_code, delay)
                     await self.sleep(delay)
                     if self.turns.is_current(run.turn):
                         continue
@@ -483,7 +533,7 @@ class VoiceSession:
         raise RuntimeError("unreachable")  # pragma: no cover
 
     @staticmethod
-    def _retryable(exc: sarvam_chat.SarvamHTTPError) -> bool:
+    def _retryable(exc: LlmHTTPError) -> bool:
         if exc.status_code not in RETRY_STATUSES:
             return False
         return exc.retry_after is None or exc.retry_after <= MAX_RETRY_AFTER_S
@@ -491,12 +541,11 @@ class VoiceSession:
     async def _stream_once(
         self, run: _Run, messages: list[dict[str, Any]], tool_choice: str
     ) -> tuple[str, list[dict[str, Any]]]:
+        assert self.llm is not None
         acc = ToolCallAccumulator()
         seg = SentenceSegmenter()
         parts: list[str] = []
-        async for delta in sarvam_chat.stream_chat(
-            api_key=self.settings.sarvam_api_key or "",
-            model=self.settings.sarvam_chat_model,
+        async for delta in self.llm.stream_chat(
             messages=messages,
             tools=TOOL_SCHEMAS,
             tool_choice=tool_choice,
@@ -520,12 +569,8 @@ class VoiceSession:
     async def _complete_once(
         self, run: _Run, messages: list[dict[str, Any]]
     ) -> tuple[str, list[dict[str, Any]]]:
-        result = await sarvam_chat.chat_completion(
-            api_key=self.settings.sarvam_api_key or "",
-            model=self.settings.sarvam_chat_model,
-            messages=messages,
-            tools=TOOL_SCHEMAS,
-        )
+        assert self.llm is not None
+        result = await self.llm.chat_completion(messages=messages, tools=TOOL_SCHEMAS)
         content = (result.content or "").strip()
         calls = list(result.tool_calls or [])
         if content and run.first_token_at is None:
@@ -554,6 +599,7 @@ class VoiceSession:
     ) -> None:
         turn = run.turn
         parsed: list[tuple[str, str, dict[str, Any]]] = []
+        extras: dict[str, Any] = {}
         for call in calls:
             fn = call.get("function") or {}
             name = str(fn.get("name") or "")
@@ -564,7 +610,10 @@ class VoiceSession:
                 args = {}
             if not isinstance(args, dict):
                 args = {}
-            parsed.append((call.get("id") or f"call_{uuid.uuid4().hex[:8]}", name, args))
+            cid = call.get("id") or f"call_{uuid.uuid4().hex[:8]}"
+            if call.get("extra_content"):
+                extras[cid] = call["extra_content"]
+            parsed.append((cid, name, args))
 
         try:
             label = tool_label(parsed[0][1], parsed[0][2])
@@ -581,6 +630,7 @@ class VoiceSession:
                         "id": cid,
                         "type": "function",
                         "function": {"name": name, "arguments": json.dumps(args)},
+                        **({"extra_content": extras[cid]} if extras.get(cid) else {}),
                     }
                     for cid, name, args in parsed
                 ],
@@ -711,10 +761,11 @@ class VoiceSession:
             if run.first_answer_audio_at is not None or run.first_token_at is not None or turn.cancelled:
                 return
             run.filler_fired = True
+            assert self.tts is not None
             synth = await fillers.get_filler(
-                api_key=self.settings.sarvam_api_key or "",
-                speaker=self.settings.sarvam_speaker,
-                model=self.settings.sarvam_tts_model,
+                api_key=self.settings.gnani_api_key or "",
+                voice=self.tts.voice_for(turn.language),
+                model=self.settings.gnani_tts_model,
                 language=turn.language,
             )
             if run.first_answer_audio_at is not None or turn.cancelled:
@@ -814,6 +865,7 @@ class VoiceSession:
             "finalToFirstAnswerAudioMs": _ms(start, run.first_answer_audio_at),
             "totalMs": _ms(start, self.clock()),
             "tools": list(run.tools),
+            "llm": self.llm.last_label if self.llm is not None else None,
         }
 
     async def _send_error(self, turn: Turn, code: str, *, fatal: bool = False) -> None:
@@ -878,4 +930,3 @@ def _compact_tool_messages(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 m = {**m, "content": content[:TOOL_COMPACT_CHARS] + "...truncated"}
         out.append(m)
     return out
-

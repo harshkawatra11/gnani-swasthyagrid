@@ -1,6 +1,6 @@
-"""Voice WebSocket tests (protocol 2) with the Sarvam network layer mocked. No
-paid Sarvam calls happen here, per the project's live-call budget rule; the
-live rehearsal with real credits happens manually.
+"""Voice WebSocket tests (protocol 2) with the Gnani and LLM network layers
+mocked. No paid calls happen here, per the project's live-call budget rule;
+the live rehearsal with real credits happens manually (scripts/probe_gnani.py).
 """
 
 from unittest.mock import AsyncMock, patch
@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
+from app.llm import client as llm_client
 from app.main import app
-from app.voice import sarvam_chat
 from tests.test_voice_fakes import ChatScript, FakeTts, text_delta, tool_delta
 
 client = TestClient(app)
@@ -31,7 +31,9 @@ def _receive_until(ws, frame_type: str, max_frames: int = 30) -> dict:
 def test_voice_ws_without_api_key_reports_unavailable(monkeypatch):
     # A real key may be present in the local .env file; an empty environment
     # variable wins over it and is falsy exactly like an absent key.
-    monkeypatch.setenv("SARVAM_API_KEY", "")
+    monkeypatch.setenv("GNANI_API_KEY", "")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("EVON_BASE_URL", "")
     get_settings.cache_clear()
 
     with client.websocket_connect("/ws/voice") as ws:
@@ -50,13 +52,13 @@ def test_voice_ws_without_api_key_reports_unavailable(monkeypatch):
         assert final["clientTurnId"] == "c-1"
 
         err = _receive_until(ws, "error")
-        assert "SARVAM_API_KEY" in err["message"]
+        assert "EVON_BASE_URL" in err["message"] or "GEMINI_API_KEY" in err["message"]
 
     get_settings.cache_clear()
 
 
 def test_voice_ws_rejects_a_hello_without_protocol_2(monkeypatch):
-    monkeypatch.setenv("SARVAM_API_KEY", "")
+    monkeypatch.setenv("GNANI_API_KEY", "")
     get_settings.cache_clear()
 
     with client.websocket_connect("/ws/voice") as ws:
@@ -70,19 +72,21 @@ def test_voice_ws_rejects_a_hello_without_protocol_2(monkeypatch):
 
 
 def test_voice_ws_grounds_a_turn_in_real_tool_data(monkeypatch):
-    monkeypatch.setenv("SARVAM_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("GNANI_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("EVON_BASE_URL", "")
     get_settings.cache_clear()
 
     script = ChatScript(
         [tool_delta("get_district_briefing", '{"district": "Kota"}')],
         [text_delta("Kota district has facilities at varying risk levels right now.")],
     )
-    monkeypatch.setattr(sarvam_chat, "stream_chat", script)
+    monkeypatch.setattr(llm_client, "stream_chat", script)
     fake_tts = FakeTts()
 
     with (
         # Never open a real STT or TTS socket in a unit test, even against a fake key.
-        patch("app.voice.session.sarvam_stt.open_stt_socket", new=AsyncMock(side_effect=RuntimeError("no live STT in tests"))),
+        patch("app.voice.session.gnani_stt.open_stt_socket", new=AsyncMock(side_effect=RuntimeError("no live STT in tests"))),
         patch("app.voice.session.TtsStream", new=lambda **_kw: fake_tts),
         client.websocket_connect("/ws/voice") as ws,
     ):
@@ -113,7 +117,7 @@ def test_voice_ws_grounds_a_turn_in_real_tool_data(monkeypatch):
 
 
 def test_voice_ws_accepts_context_ptt_and_interrupt_frames(monkeypatch):
-    monkeypatch.setenv("SARVAM_API_KEY", "")
+    monkeypatch.setenv("GNANI_API_KEY", "")
     get_settings.cache_clear()
 
     with client.websocket_connect("/ws/voice") as ws:

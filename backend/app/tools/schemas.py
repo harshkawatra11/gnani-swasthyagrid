@@ -1,6 +1,6 @@
-"""OpenAI-dialect JSON tool schema for the Sarvam voice agent (tool set v2).
+"""OpenAI-dialect JSON tool schema for the voice agent's LLM (Evon or Gemini through the OpenAI-compatible router) (tool set v2).
 
-Gemini's SDK introspects the callables in `app.tools.v2`; Sarvam needs this
+Gemini's SDK introspects the callables in `app.tools.v2`; the OpenAI-compatible router needs this
 explicit schema. A parity test keeps names and parameters in step with the
 callables.
 """

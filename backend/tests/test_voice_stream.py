@@ -7,9 +7,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.voice.sarvam_chat import (
+from app.llm.client import (
     ChatDelta,
-    SarvamHTTPError,
+    LlmHTTPError,
+    LlmProvider,
     ToolCallAccumulator,
     parse_sse_line,
     stream_chat,
@@ -23,6 +24,8 @@ def anyio_backend():
 
 
 FIXTURES = Path(__file__).resolve().parents[2] / "docs" / "probes" / "fixtures"
+
+PROVIDER = LlmProvider(name="evon", label="Gnani Evon v3.3", base_url="https://x/v1", model="m", api_key="secret")
 
 
 def _client(body: str, status: int = 200, headers: dict | None = None, seen: list | None = None):
@@ -42,7 +45,7 @@ async def _collect(fixture: str, **kw) -> list[ChatDelta]:
         return [
             d
             async for d in stream_chat(
-                api_key="k", model="m", messages=[{"role": "user", "content": "hi"}], client=client, **kw
+                provider=PROVIDER, messages=[{"role": "user", "content": "hi"}], client=client, **kw
             )
         ]
 
@@ -113,16 +116,15 @@ async def test_stream_stops_at_done_and_sends_expected_request():
         out = [
             d
             async for d in stream_chat(
-                api_key="secret", model="m", messages=[], tools=[{"type": "function"}],
+                provider=PROVIDER, messages=[], tools=[{"type": "function"}],
                 tool_choice="none", max_tokens=320, client=client,
             )
         ]  # fmt: skip
     assert [d.content for d in out] == ["A"]
     req = seen[0]
-    assert req.headers["api-subscription-key"] == "secret"
+    assert req.headers["authorization"] == "Bearer secret"
     payload = json.loads(req.content)
     assert payload["stream"] is True
-    assert payload["reasoning_effort"] is None
     assert payload["tool_choice"] == "none"
     assert payload["max_tokens"] == 320
 
@@ -130,11 +132,12 @@ async def test_stream_stops_at_done_and_sends_expected_request():
 @pytest.mark.anyio
 async def test_http_error_carries_status_and_retry_after():
     async with _client("busy", status=429, headers={"retry-after": "2"}) as client:
-        with pytest.raises(SarvamHTTPError) as exc:
-            async for _ in stream_chat(api_key="k", model="m", messages=[], client=client):
+        with pytest.raises(LlmHTTPError) as exc:
+            async for _ in stream_chat(provider=PROVIDER, messages=[], client=client):
                 pass
     assert exc.value.status_code == 429
     assert exc.value.retry_after == 2.0
+    assert exc.value.provider == "evon"
 
 
 def _segment(chunks: list[str]) -> list[str]:

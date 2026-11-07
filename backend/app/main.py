@@ -91,10 +91,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    origins = settings.cors_origins + [
-        "https://swasthyagrid.vercel.app",
-        "https://swasthyagrid-git-main-harshkawatra11s-projects.vercel.app"
-    ]
+    origins = settings.cors_origins + settings.frontend_origins
 
     app.add_middleware(
         CORSMiddleware,

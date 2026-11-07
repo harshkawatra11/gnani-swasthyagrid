@@ -1,4 +1,4 @@
-"""Metrics, timeouts, retries and spoken fallbacks (task B7). Sarvam is mocked."""
+"""Metrics, timeouts, retries and spoken fallbacks (task B7). The LLM is mocked."""
 
 import asyncio
 from unittest.mock import AsyncMock
@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from app.llm import client as llm_client
+from app.llm.client import ChatResult, LlmHTTPError
 from app.tools.v2 import ToolResult
-from app.voice import sarvam_chat
 from app.voice import session as session_mod
-from app.voice.sarvam_chat import SarvamHTTPError
 from tests.test_voice_fakes import (
     ChatScript,
     FakeTts,
@@ -28,7 +28,7 @@ def anyio_backend():
 
 
 def _use(monkeypatch, script: ChatScript) -> ChatScript:
-    monkeypatch.setattr(sarvam_chat, "stream_chat", script)
+    monkeypatch.setattr(llm_client, "stream_chat", script)
     return script
 
 
@@ -67,6 +67,7 @@ async def test_turn_end_metrics_use_the_end_of_speech_clock(monkeypatch):
         "finalToFirstAnswerAudioMs": 400,
         "totalMs": 1000,
         "tools": [],
+        "llm": session.llm.last_label,
     }
 
 
@@ -86,7 +87,7 @@ async def test_metrics_list_tools_and_tolerate_missing_audio(monkeypatch):
 async def test_retry_once_on_429_with_small_retry_after(monkeypatch):
     script = _use(
         monkeypatch,
-        ChatScript(SarvamHTTPError(429, "slow down", 2.0), [text_delta("Second try worked.")]),
+        ChatScript(LlmHTTPError(429, "slow down", 2.0), [text_delta("Second try worked.")]),
     )
     sleeps = Sleeps()
     session, frames, _ = make_session(tools={}, sleep=sleeps)
@@ -99,7 +100,7 @@ async def test_retry_once_on_429_with_small_retry_after(monkeypatch):
 
 @pytest.mark.anyio
 async def test_retry_once_on_503_without_retry_after_header(monkeypatch):
-    script = _use(monkeypatch, ChatScript(SarvamHTTPError(503, "unavailable", None), [text_delta("Back.")]))
+    script = _use(monkeypatch, ChatScript(LlmHTTPError(503, "unavailable", None), [text_delta("Back.")]))
     sleeps = Sleeps()
     session, frames, _ = make_session(tools={}, sleep=sleeps)
     await run_typed(session, "hello")
@@ -111,7 +112,7 @@ async def test_retry_once_on_503_without_retry_after_header(monkeypatch):
 async def test_retry_happens_only_once(monkeypatch):
     script = _use(
         monkeypatch,
-        ChatScript(SarvamHTTPError(429, "x", 0.0), SarvamHTTPError(429, "x", 0.0), [text_delta("never")]),
+        ChatScript(LlmHTTPError(429, "x", 0.0), LlmHTTPError(429, "x", 0.0), [text_delta("never")]),
     )
     session, frames, tts = make_session(tools={}, sleep=Sleeps())
     await run_typed(session, "hello")
@@ -122,7 +123,7 @@ async def test_retry_happens_only_once(monkeypatch):
 
 @pytest.mark.anyio
 async def test_no_retry_when_retry_after_is_over_three_seconds(monkeypatch):
-    script = _use(monkeypatch, ChatScript(SarvamHTTPError(429, "x", 4.0), [text_delta("never")]))
+    script = _use(monkeypatch, ChatScript(LlmHTTPError(429, "x", 4.0), [text_delta("never")]))
     sleeps = Sleeps()
     session, frames, tts = make_session(tools={}, sleep=sleeps)
     await run_typed(session, "hello")
@@ -134,7 +135,7 @@ async def test_no_retry_when_retry_after_is_over_three_seconds(monkeypatch):
 @pytest.mark.anyio
 @pytest.mark.parametrize("status", [400, 401, 404, 422])
 async def test_never_retry_4xx_client_errors(monkeypatch, status):
-    script = _use(monkeypatch, ChatScript(SarvamHTTPError(status, "bad request", 0.0), [text_delta("never")]))
+    script = _use(monkeypatch, ChatScript(LlmHTTPError(status, "bad request", 0.0), [text_delta("never")]))
     sleeps = Sleeps()
     session, frames, tts = make_session(tools={}, sleep=sleeps)
     await run_typed(session, "hello")
@@ -147,7 +148,7 @@ async def test_never_retry_4xx_client_errors(monkeypatch, status):
 
 @pytest.mark.anyio
 async def test_no_retry_when_the_turn_is_no_longer_current(monkeypatch):
-    script = _use(monkeypatch, ChatScript(SarvamHTTPError(429, "x", 1.0), [text_delta("never")]))
+    script = _use(monkeypatch, ChatScript(LlmHTTPError(429, "x", 1.0), [text_delta("never")]))
     release = asyncio.Event()
 
     async def blocked_sleep(_delay: float) -> None:
@@ -165,7 +166,7 @@ async def test_no_retry_when_the_turn_is_no_longer_current(monkeypatch):
 async def test_retry_covers_the_answer_call_after_tools(monkeypatch):
     script = _use(
         monkeypatch,
-        ChatScript([tool_delta("t")], SarvamHTTPError(503, "x", 1.0), [text_delta("Answer after retry.")]),
+        ChatScript([tool_delta("t")], LlmHTTPError(503, "x", 1.0), [text_delta("Answer after retry.")]),
     )
     session, frames, _ = make_session(tools={"t": lambda: ToolResult({"a": 1})}, sleep=Sleeps())
     await run_typed(session, "go")
@@ -176,11 +177,9 @@ async def test_retry_covers_the_answer_call_after_tools(monkeypatch):
 
 @pytest.mark.anyio
 async def test_retry_covers_non_streaming_planning(monkeypatch):
-    complete = AsyncMock(
-        side_effect=[SarvamHTTPError(429, "x", 0.0), sarvam_chat.ChatResult("Plain answer.", None, "stop")]
-    )
-    monkeypatch.setattr(sarvam_chat, "chat_completion", complete)
-    session, frames, _ = make_session(tools={}, sleep=Sleeps(), sarvam_stream_with_tools=False)
+    complete = AsyncMock(side_effect=[LlmHTTPError(429, "x", 0.0), ChatResult("Plain answer.", None, "stop")])
+    monkeypatch.setattr(llm_client, "chat_completion", complete)
+    session, frames, _ = make_session(tools={}, sleep=Sleeps(), llm_stream_with_tools=False)
     await run_typed(session, "hello")
     assert complete.await_count == 2
     assert frames.of("reply")[0]["text"] == "Plain answer."
@@ -214,7 +213,7 @@ async def test_answer_timeout_after_tools_speaks_the_fallback(monkeypatch):
 
 @pytest.mark.anyio
 async def test_fallback_is_spoken_in_the_turn_language(monkeypatch):
-    _use(monkeypatch, ChatScript(SarvamHTTPError(400, "bad", None)))
+    _use(monkeypatch, ChatScript(LlmHTTPError(400, "bad", None)))
     session, frames, tts = make_session(tools={})
     await run_typed(session, "Kota district mein kya haal hai?")
     assert tts.language == "hi-IN"
@@ -224,7 +223,7 @@ async def test_fallback_is_spoken_in_the_turn_language(monkeypatch):
 
 @pytest.mark.anyio
 async def test_a_partial_answer_is_kept_when_the_stream_fails_midway(monkeypatch):
-    _use(monkeypatch, ChatScript([text_delta("Kota has two problems. "), SarvamHTTPError(500, "boom", None)]))
+    _use(monkeypatch, ChatScript([text_delta("Kota has two problems. "), LlmHTTPError(500, "boom", None)]))
     session, frames, tts = make_session(tools={})
     await run_typed(session, "hello")
     assert tts.said == ["Kota has two problems.", FALLBACK_EN]
@@ -269,30 +268,36 @@ def _client(handler) -> httpx.AsyncClient:
 
 @pytest.mark.anyio
 async def test_chat_completion_raises_http_error_with_retry_after():
+    from app.llm.client import LlmProvider
+
+    provider = LlmProvider(name="gemini", label="g", base_url="https://x/v1", model="m")
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, headers={"retry-after": "2"}, text="rate limited")
 
-    with pytest.raises(SarvamHTTPError) as info:
-        await sarvam_chat.chat_completion(
-            api_key="k", model="m", messages=[], tools=[], client=_client(handler)
-        )
+    with pytest.raises(LlmHTTPError) as info:
+        await llm_client.chat_completion(provider=provider, messages=[], tools=[], client=_client(handler))
     assert info.value.status_code == 429 and info.value.retry_after == 2.0
     assert isinstance(info.value, RuntimeError)  # protocol 1 code catches Exception
 
 
 @pytest.mark.anyio
 async def test_chat_completion_success_and_missing_retry_after():
+    from app.llm.client import LlmProvider
+
+    provider = LlmProvider(name="gemini", label="g", base_url="https://x/v1", model="m")
+
     def ok(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200, json={"choices": [{"message": {"content": "hi", "tool_calls": None}, "finish_reason": "stop"}]}
         )
 
-    res = await sarvam_chat.chat_completion(api_key="k", model="m", messages=[], tools=[], client=_client(ok))
+    res = await llm_client.chat_completion(provider=provider, messages=[], tools=[], client=_client(ok))
     assert res.content == "hi" and res.finish_reason == "stop"
 
     def bad(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, text="down")
 
-    with pytest.raises(SarvamHTTPError) as info:
-        await sarvam_chat.chat_completion(api_key="k", model="m", messages=[], tools=[], client=_client(bad))
+    with pytest.raises(LlmHTTPError) as info:
+        await llm_client.chat_completion(provider=provider, messages=[], tools=[], client=_client(bad))
     assert info.value.retry_after is None

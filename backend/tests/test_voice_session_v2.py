@@ -1,4 +1,4 @@
-"""VoiceSession protocol 2 with all Sarvam calls mocked."""
+"""VoiceSession protocol 2 with all LLM and Gnani calls mocked."""
 
 import asyncio
 import logging
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.llm import client as llm_client
 from app.tools.v2 import ToolResult
-from app.voice import sarvam_chat
 from app.voice import session as session_mod
 from tests.test_voice_fakes import (
     ChatScript,
@@ -28,7 +28,7 @@ def anyio_backend():
 
 
 def _use(monkeypatch, script: ChatScript) -> ChatScript:
-    monkeypatch.setattr(sarvam_chat, "stream_chat", script)
+    monkeypatch.setattr(llm_client, "stream_chat", script)
     return script
 
 
@@ -328,22 +328,22 @@ async def test_tool_calls_in_a_round_run_concurrently_and_rounds_are_capped(monk
 async def test_non_streaming_planning_when_flag_is_off(monkeypatch):
     stream = _use(monkeypatch, ChatScript([text_delta("Streamed answer.")]))
     results = [
-        sarvam_chat.ChatResult(
+        llm_client.ChatResult(
             None,
             [{"id": "c1", "function": {"name": "get_district_briefing", "arguments": '{"district": "Kota"}'}}],
             "tool_calls",
         ),
     ]
     complete = AsyncMock(side_effect=results)
-    monkeypatch.setattr(sarvam_chat, "chat_completion", complete)
-    session, frames, _ = make_session(tools=DISTRICT_TOOLS, sarvam_stream_with_tools=False)
+    monkeypatch.setattr(llm_client, "chat_completion", complete)
+    session, frames, _ = make_session(tools=DISTRICT_TOOLS, llm_stream_with_tools=False)
     await run_typed(session, "How is Kota?")
     assert complete.await_count == 1
     assert [c["tool_choice"] for c in stream.calls] == ["none"]  # only the answer call streams
     assert frames.of("reply")[0]["text"] == "Streamed answer."
 
-    complete2 = AsyncMock(return_value=sarvam_chat.ChatResult("Direct answer. Two sentences.", None, "stop"))
-    monkeypatch.setattr(sarvam_chat, "chat_completion", complete2)
+    complete2 = AsyncMock(return_value=llm_client.ChatResult("Direct answer. Two sentences.", None, "stop"))
+    monkeypatch.setattr(llm_client, "chat_completion", complete2)
     await run_typed(session, "What is ORS?")
     assert frames.of("reply")[1]["text"] == "Direct answer. Two sentences."
     assert [f["text"] for f in frames.of("reply_delta")][-2:] == ["Direct answer.", "Two sentences."]
@@ -439,17 +439,21 @@ async def test_ptt_up_flushes_stt_and_down_stops_the_assistant(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_stt_events_drive_vad_partials_and_coalesced_turns(monkeypatch):
+async def test_stt_events_drive_vad_and_coalesced_turns(monkeypatch):
+    """Gnani sends no partial transcripts: each `transcript` event is final, so
+    the session treats it both as the instant text shown to the officer (a
+    `partial` frame) and as the signal fed to the turn coalescer."""
     _use(monkeypatch, ChatScript([text_delta("Answer.")]))
     session, frames, _ = make_session(tools={})
-    await session._on_stt_event({"event": "vad.speech_start"})
-    await session._on_stt_event({"event": "transcript.partial", "text": "how many"})
-    await session._on_stt_event({"event": "vad.speech_end"})
-    await session._on_stt_event({"event": "transcript.final", "text": "How many", "language": "en-IN"})
-    await session._on_stt_event({"event": "transcript.final", "text": "shipments are late", "language": "en-IN"})
+    await session._on_stt_event({"type": "speech_start"})
+    await session._on_stt_event({"type": "processing"})
+    await session._on_stt_event({"type": "transcript", "text": "How many", "detected_language_code": "en-IN", "is_final": True})
+    await session._on_stt_event(
+        {"type": "transcript", "text": "shipments are late", "detected_language_code": "en-IN", "is_final": True}
+    )
     await asyncio.sleep(0.7)
     assert [f["state"] for f in frames.of("vad")] == ["start", "end"]
-    assert frames.of("partial")[0]["text"] == "how many"
+    assert [f["text"] for f in frames.of("partial")] == ["How many", "shipments are late"]
     assert frames.of("final")[0]["text"] == "How many shipments are late"
     assert frames.of("final")[0]["language"] == "en-IN"
     assert frames.of("reply")[0]["text"] == "Answer."
@@ -457,12 +461,13 @@ async def test_stt_events_drive_vad_partials_and_coalesced_turns(monkeypatch):
 
 @pytest.mark.anyio
 async def test_start_sends_ready_v2_and_speaks_the_greeting(monkeypatch):
-    monkeypatch.setattr(session_mod.sarvam_stt, "open_stt_socket", AsyncMock(side_effect=RuntimeError("no live STT")))
+    monkeypatch.setattr(session_mod.gnani_stt, "open_stt_socket", AsyncMock(side_effect=RuntimeError("no live STT")))
     session, frames, _tts = make_session(tools={})
     await session.start(language="en-IN", scope="district_kota", mode="ptt", protocol=2)
     ready = frames.of("ready")[0]
     assert ready["protocol"] == 2 and ready["sttMode"] == "rest" and ready["ttsMode"] == "ws"
     assert ready["speaker"] and ready["sessionId"] == session.session_id
+    assert ready["stack"]["llm"]
     await asyncio.wait_for(session.turns.current.task, 2)
     reply = frames.of("reply")[0]
     assert reply["text"].startswith("Hello. I am Swasthya")
@@ -484,18 +489,19 @@ async def test_speak_false_skips_tts_but_still_replies(monkeypatch):
 
 @pytest.mark.anyio
 async def test_missing_api_key_reports_fatal_error():
-    session, frames, _ = make_session(tools={}, sarvam_api_key="")
+    session, frames, _ = make_session(tools={}, gemini_api_key="", evon_base_url=None)
     await run_typed(session, "hello")
     err = frames.of("error")[0]
-    assert err["fatal"] is True and err["code"] == "no_key" and "SARVAM_API_KEY" in err["message"]
+    assert err["fatal"] is True and err["code"] == "no_key"
+    assert "EVON_BASE_URL" in err["message"] and "GEMINI_API_KEY" in err["message"]
 
 
 def test_fake_tts_signature_matches_tts_stream():
     import inspect
 
-    from app.voice.sarvam_tts_ws import TtsStream
+    from app.voice.gnani_tts import TtsStream
 
-    for name in ("begin_turn", "say", "end_turn", "cancel_turn", "close"):
+    for name in ("begin_turn", "say", "end_turn", "cancel_turn", "close", "voice_for"):
         assert list(inspect.signature(getattr(FakeTts, name)).parameters) == list(
             inspect.signature(getattr(TtsStream, name)).parameters
         )

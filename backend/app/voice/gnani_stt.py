@@ -1,22 +1,26 @@
-"""Sarvam realtime STT websocket client.
+"""Gnani Prisma realtime STT over WebSocket.
 
-saaras:v3-realtime, linear16 mono 16kHz, "fast" stream_type for the lowest
-latency, "auto" language for Hinglish code-switching by default (a district
-officer may ask half in English, half in Hindi, in one sentence).
+`prisma-v2.5`, linear16 mono, binary frames of exactly 1024 bytes (512 samples, 32 ms
+at 16 kHz). All session config (language, model, format, VAD tuning) is sent as
+handshake headers, not a query string. Gnani emits no partial transcripts: every
+`transcript` message is final, so the voice session treats a final transcript as the
+signal that confirms an armed barge-in (see `app.voice.turns`).
 
-Ported from the verified contract in
-nari-kavach/apps/relay/src/sarvam/stt-ws.ts, extended for voice v2:
+Ported from `app.voice.sarvam_stt` (now removed), restructured for Gnani's wire
+contract documented at docs.gnani.ai/api/STT/stt-websocket.
 
-- `parse_stt_event` turns raw events (discriminator key `event`) into typed
-  `SttEvent`s: VAD start/end, partial and final transcripts (with `language`),
-  errors.
-- `SttHandle.flush()` sends `{"event":"flush"}` for hold-to-talk.
-- If the socket drops, the handle reconnects (a few attempts) and keeps the
-  last second of audio (10 frames of 100 ms, oldest dropped first) so speech
-  spoken during the reconnect is not lost.
+- `parse_stt_event` turns raw events (discriminator key `type`) into typed `SttEvent`s.
+- `FrameSplitter` buffers arbitrary-length b64 PCM into exact 1024-byte binary frames,
+  carrying a remainder across `send_audio` calls (the browser sends 100 ms chunks,
+  which is 3200 bytes at 16 kHz / 16-bit, not a multiple of 1024).
+- `SttHandle.flush()` pads and sends any partial frame, then `{"type":"commit"}` for
+  push-to-talk release.
+- If the socket drops, the handle reconnects (a few attempts) and keeps about a second
+  of frames so speech spoken during the reconnect is not lost.
 """
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
@@ -24,16 +28,16 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlencode
 
 import websockets
 from websockets.asyncio.client import ClientConnection
 
 logger = logging.getLogger("swasthyagrid.voice")
 
-SARVAM_STT_WS_BASE = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
+GNANI_STT_WS_URL = "wss://api.vachana.ai/stt/v3/stream"
 
-PREROLL_FRAMES = 10  # about 1 s at 100 ms per frame
+FRAME_BYTES = 1024  # exactly 512 samples of 16-bit mono PCM, 32 ms at 16 kHz
+PREROLL_FRAMES = 32  # about 1 s at 1024 bytes / 32 ms per frame
 MAX_RECONNECTS = 3
 RECONNECT_DELAY_S = 0.3
 
@@ -43,7 +47,9 @@ Connect = Callable[[str, dict[str, str]], Awaitable[ClientConnection]]
 
 @dataclass
 class SttEvent:
-    """kind: session_begin | vad_start | vad_end | partial | final | error | other"""
+    """kind: session_begin | vad_start | vad_end | final | error | other
+
+    Gnani never sends partial transcripts; `final` is the only transcript kind."""
 
     kind: str
     text: str = ""
@@ -54,29 +60,79 @@ class SttEvent:
 
 
 _KINDS = {
-    "session.begin": "session_begin",
-    "vad.speech_start": "vad_start",
-    "vad.speech_end": "vad_end",
-    "transcript.partial": "partial",
-    "transcript.final": "final",
+    "connected": "session_begin",
+    "speech_start": "vad_start",
+    "processing": "vad_end",
+    "transcript": "final",
     "error": "error",
 }
 
 
 def parse_stt_event(event: dict[str, Any]) -> SttEvent:
-    kind = _KINDS.get(str(event.get("event")), "other")
+    kind = _KINDS.get(str(event.get("type")), "other")
     return SttEvent(
         kind=kind,
         text=str(event.get("text") or ""),
-        language=event.get("language"),
-        fatal=bool(event.get("is_fatal")),
+        language=event.get("detected_language_code"),
+        fatal=False,  # Gnani's error frames carry no is_fatal flag; reconnect handles drops
         message=event.get("message"),
         raw=event,
     )
 
 
+def stt_language(pref: str, model: str) -> str:
+    """Gnani v2.5 takes exactly one language code; it has no "auto" language. hi-IN
+    handles Hinglish code-switching well enough for a district officer's mixed speech.
+    v3.0 (not the default here) accepts a comma-separated language_candidates list."""
+    if pref in ("en-IN", "hi-IN"):
+        return pref
+    return "en-IN,hi-IN" if model == "prisma-v3.0" else "hi-IN"
+
+
+def stt_headers(*, api_key: str, language: str, model: str, fmt: str, sample_rate: int = 16000) -> dict[str, str]:
+    return {
+        "x-api-key-id": api_key,
+        "language_code": language,
+        "model": model,
+        "format": fmt,
+        "x-sample-rate": str(sample_rate),
+        "x-idle-timeout-sec": "900",
+        "x-min-silence-ms": "500",
+        "x-vad-threshold": "0.5",
+    }
+
+
+class FrameSplitter:
+    """Buffers PCM bytes into exact `FRAME_BYTES`-sized frames, carrying any
+    remainder across calls."""
+
+    def __init__(self, frame_bytes: int = FRAME_BYTES):
+        self._frame_bytes = frame_bytes
+        self._carry = b""
+
+    def feed(self, pcm: bytes) -> list[bytes]:
+        buf = self._carry + pcm
+        frames = []
+        n = self._frame_bytes
+        i = 0
+        while i + n <= len(buf):
+            frames.append(buf[i : i + n])
+            i += n
+        self._carry = buf[i:]
+        return frames
+
+    def pad_flush(self) -> bytes | None:
+        """Zero-pad the remainder to one full frame and clear it. Returns None if
+        there is no remainder."""
+        if not self._carry:
+            return None
+        frame = self._carry + b"\x00" * (self._frame_bytes - len(self._carry))
+        self._carry = b""
+        return frame
+
+
 async def _default_connect(url: str, headers: dict[str, str]) -> ClientConnection:
-    return await websockets.connect(url, additional_headers=headers)
+    return await websockets.connect(url, additional_headers=headers, max_size=None)
 
 
 class SttHandle:
@@ -99,7 +155,8 @@ class SttHandle:
         self._on_failed = on_failed
         self._max_reconnects = max_reconnects
         self._reconnect_delay = reconnect_delay
-        self._preroll: deque[str] = deque(maxlen=preroll_frames)
+        self._splitter = FrameSplitter()
+        self._preroll: deque[bytes] = deque(maxlen=preroll_frames)
         self._conn: ClientConnection | None = None
         self._recv_task: asyncio.Task | None = None
         self._reconnect_task: asyncio.Task | None = None
@@ -117,35 +174,38 @@ class SttHandle:
 
     async def send_audio(self, b64_audio: str) -> None:
         if self.failed:
-            raise ConnectionError("Sarvam STT socket could not be re-established")
+            raise ConnectionError("Gnani STT socket could not be re-established")
+        pcm = base64.b64decode(b64_audio)
+        frames = self._splitter.feed(pcm)
         conn = self._conn
         if conn is not None:
             try:
-                await conn.send(json.dumps({"event": "audio_input", "audio": b64_audio}))
+                for frame in frames:
+                    await conn.send(frame)
                 return
             except Exception:
                 logger.debug("STT send failed, reconnecting", exc_info=True)
                 self._begin_reconnect(conn)
-        self._preroll.append(b64_audio)  # deque(maxlen) drops the oldest frame
+        for frame in frames:
+            self._preroll.append(frame)  # deque(maxlen) drops the oldest frame
 
     async def flush(self) -> None:
-        """End of a hold-to-talk utterance: ask STT to finalise now."""
+        """End of a hold-to-talk utterance: pad and send any partial frame, then
+        ask Prisma to finalise now."""
         conn = self._conn
         if conn is None:
             return
         try:
-            await conn.send(json.dumps({"event": "flush"}))
+            frame = self._splitter.pad_flush()
+            if frame is not None:
+                await conn.send(frame)
+            await conn.send(json.dumps({"type": "commit"}))
         except Exception:
             logger.debug("STT flush failed", exc_info=True)
 
     async def end(self) -> None:
         self._closed = True
         conn, self._conn = self._conn, None
-        if conn is not None:
-            try:
-                await conn.send(json.dumps({"event": "end"}))
-            except Exception:
-                logger.debug("Sarvam STT socket already closed before end() could send")
         for task in (self._recv_task, self._reconnect_task):
             if task is not None and task is not asyncio.current_task():
                 task.cancel()
@@ -158,6 +218,8 @@ class SttHandle:
     async def _recv_loop(self, conn: ClientConnection) -> None:
         try:
             async for raw in conn:
+                if isinstance(raw, bytes):
+                    continue  # Gnani's STT socket sends only JSON text frames
                 try:
                     event = json.loads(raw)
                 except (ValueError, TypeError):
@@ -168,7 +230,7 @@ class SttHandle:
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Sarvam STT receive loop failed")
+            logger.exception("Gnani STT receive loop failed")
         if not self._closed:
             self._begin_reconnect(conn)
 
@@ -193,7 +255,7 @@ class SttHandle:
             try:
                 while self._preroll:
                     frame = self._preroll.popleft()
-                    await conn.send(json.dumps({"event": "audio_input", "audio": frame}))
+                    await conn.send(frame)
             except Exception:
                 logger.warning("STT preroll replay failed", exc_info=True)
                 with contextlib.suppress(Exception):
@@ -212,29 +274,19 @@ async def open_stt_socket(
     *,
     api_key: str,
     language: str,
-    on_event: OnEvent,
     model: str,
-    base_url: str = SARVAM_STT_WS_BASE,
+    fmt: str,
+    on_event: OnEvent,
+    url: str = GNANI_STT_WS_URL,
     connect: Connect = _default_connect,
     on_failed: Callable[[], Awaitable[None]] | None = None,
     max_reconnects: int = MAX_RECONNECTS,
     reconnect_delay: float = RECONNECT_DELAY_S,
 ) -> SttHandle:
-    qs = urlencode(
-        {
-            "model": model,
-            "language_code": language,
-            "stream_type": "fast",
-            "encoding": "linear16",
-            "sample_rate": "16000",
-            "endpointing": "vad",
-            "silence_duration_ms": "500",
-            "threshold": "0.3",
-        }
-    )
+    headers = stt_headers(api_key=api_key, language=stt_language(language, model), model=model, fmt=fmt)
     handle = SttHandle(
-        url=f"{base_url}?{qs}",
-        headers={"api-subscription-key": api_key},
+        url=url,
+        headers=headers,
         on_event=on_event,
         connect=connect,
         on_failed=on_failed,

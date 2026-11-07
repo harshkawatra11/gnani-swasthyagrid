@@ -11,7 +11,8 @@ os.environ.update(
         "DATA_SOURCE": "seed",
         "LOGISTICS_TICK": "false",
         "GEMINI_API_KEY": "",
-        "SARVAM_API_KEY": "",
+        "GNANI_API_KEY": "",
+        "EVON_BASE_URL": "",
         "LOGISTICS_SERVICE_TOKEN": "test-token",
         "LOGISTICS_STATE_PATH": str(Path(tempfile.mkdtemp()) / "state.json"),
     }

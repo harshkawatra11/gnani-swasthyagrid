@@ -1,7 +1,8 @@
 # Voice agent accuracy eval cases (plan 7.10, B9).
 #
-# Each case is one typed turn sent to a real VoiceSession (real Sarvam chat,
-# real district/forecast/recommendation/logistics/insights services). The
+# Each case is one typed turn sent to a real VoiceSession (real LLM chat via the
+# Evon/Gemini router, real district/forecast/recommendation/logistics/insights
+# services). The
 # runner never hard-codes an expected answer: ground truth for the "grounded"
 # check is computed live, at run time, by calling the same tool function with
 # the arguments the model actually chose.

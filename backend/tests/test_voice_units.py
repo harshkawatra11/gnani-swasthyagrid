@@ -2,7 +2,7 @@ import struct
 
 from app.tools.schemas import TOOL_NAMES
 from app.tools.v2 import build_tool_functions
-from app.voice.sarvam_tts import parse_wav_header
+from app.voice.wav import parse_wav_header
 
 
 def _wav_with_list_chunk(sample_rate: int, pcm: bytes) -> bytes:
@@ -34,7 +34,7 @@ def test_parse_wav_header_rejects_non_wav_bytes():
 
 
 def test_tool_schema_names_match_dispatch_table():
-    """The Sarvam tool schema and the Gemini/dispatch tool list must never
+    """The voice LLM tool schema and the Gemini/dispatch tool list must never
     drift: same names, same set (13 tools in v2), or a tool call from one
     agent would silently fail to dispatch."""
 

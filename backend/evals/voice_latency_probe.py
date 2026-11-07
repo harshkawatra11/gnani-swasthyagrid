@@ -5,7 +5,7 @@ and reports the server side `turn_end.metrics` (final to first audio of any
 kind, final to first answer audio) plus a client side send-to-first-audio-frame
 check. Turns are grouped by whether the model called a tool.
 
-Live Sarvam calls: 2 per tool turn, 1 per no-tool turn, plus TTS. Budget is 2
+Live LLM calls: 2 per tool turn, 1 per no-tool turn, plus Gnani TTS. Budget is 2
 probes per plan. Usage:
 
     python -m evals.voice_latency_probe --url ws://127.0.0.1:8094/ws/voice

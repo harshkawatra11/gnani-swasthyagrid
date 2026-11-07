@@ -1,15 +1,15 @@
-"""STT additions against a fake STT websocket server (no Sarvam calls)."""
+"""STT additions against a fake Gnani Prisma websocket server (no live calls)."""
 
 import asyncio
+import base64
 import json
-from pathlib import Path
 
 import pytest
 from websockets.asyncio.server import serve
 
-from app.voice import sarvam_stt
+from app.voice import gnani_stt
 
-FIXTURE = Path(__file__).resolve().parents[2] / "docs" / "probes" / "fixtures" / "stt_realtime_events.txt"
+PCM_1024 = b"\x01\x00" * 512  # exactly one 1024-byte frame
 
 
 @pytest.fixture
@@ -18,41 +18,41 @@ def anyio_backend():
 
 
 class FakeStt:
-    """Records client messages per connection. `drop_first_after` closes the
-    first connection after that many audio frames."""
+    """Records client messages per connection (binary frames and JSON text
+    messages). `drop_first_after` closes the first connection after that many
+    binary frames."""
 
     def __init__(self, replay_events: list[dict] | None = None, drop_first_after: int | None = None):
-        self.connections: list[list[dict]] = []
-        self.paths: list[str] = []
-        self.headers: list[str | None] = []
+        self.connections: list[list] = []
+        self.headers: list[dict] = []
         self.replay = replay_events or []
         self.drop_first_after = drop_first_after
         self._server = None
         self.url = ""
 
     async def _handler(self, ws):
-        msgs: list[dict] = []
+        msgs: list = []
         idx = len(self.connections)
         self.connections.append(msgs)
-        self.paths.append(ws.request.path)
-        self.headers.append(ws.request.headers.get("api-subscription-key"))
+        self.headers.append(dict(ws.request.headers))
+        frame_count = 0
         async for raw in ws:
-            msg = json.loads(raw)
-            msgs.append(msg)
-            if msg["event"] == "flush":
-                for ev in self.replay:
-                    await ws.send(json.dumps(ev))
-            if (
-                idx == 0
-                and self.drop_first_after is not None
-                and sum(m["event"] == "audio_input" for m in msgs) >= self.drop_first_after
-            ):
+            if isinstance(raw, bytes):
+                msgs.append(("frame", raw))
+                frame_count += 1
+            else:
+                msg = json.loads(raw)
+                msgs.append(("text", msg))
+                if msg.get("type") == "commit":
+                    for ev in self.replay:
+                        await ws.send(json.dumps(ev))
+            if idx == 0 and self.drop_first_after is not None and frame_count >= self.drop_first_after:
                 await ws.close(code=1011)
                 return
 
     async def __aenter__(self):
         self._server = await serve(self._handler, "127.0.0.1", 0)
-        self.url = f"ws://127.0.0.1:{self._server.sockets[0].getsockname()[1]}/speech-to-text-realtime/ws"
+        self.url = f"ws://127.0.0.1:{self._server.sockets[0].getsockname()[1]}/stt/v3/stream"
         return self
 
     async def __aexit__(self, *exc):
@@ -61,41 +61,84 @@ class FakeStt:
 
 
 def _fixture_events() -> list[dict]:
-    """The probe fixture is truncated after the partials; the closing events are
-    the ones recorded in docs/probes/2026-09-sarvam.md."""
-    events = [json.loads(x) for x in FIXTURE.read_text(encoding="utf-8").splitlines() if x.startswith("{")]
-    events.append({"event": "vad.speech_end", "utterance_idx": 0, "confidence": 0.9})
-    events.append(
+    return [
+        {"type": "connected", "message": "ready"},
+        {"type": "speech_start"},
+        {"type": "processing"},
         {
-            "event": "transcript.final",
-            "utterance_idx": 0,
+            "type": "transcript",
             "text": "Kota mein kitni facilities critical hain?",
-            "language": "en-IN",
-            "language_confidence": 0.4,
-        }
-    )
-    return events
+            "detected_language_code": "en-IN",
+            "segment_index": 1,
+            "is_final": True,
+        },
+    ]
 
 
-def test_parse_stt_event_kinds_from_probe_fixture():
-    events = [sarvam_stt.parse_stt_event(e) for e in _fixture_events()]
+# ------------------------------------------------------------------ pure helpers
+
+
+def test_stt_language_maps_auto_to_hi_for_v2_5():
+    assert gnani_stt.stt_language("auto", "prisma-v2.5") == "hi-IN"
+    assert gnani_stt.stt_language("en-IN", "prisma-v2.5") == "en-IN"
+    assert gnani_stt.stt_language("hi-IN", "prisma-v2.5") == "hi-IN"
+
+
+def test_stt_language_auto_for_v3_gives_candidate_list():
+    assert gnani_stt.stt_language("auto", "prisma-v3.0") == "en-IN,hi-IN"
+
+
+def test_stt_headers_contain_required_fields():
+    headers = gnani_stt.stt_headers(api_key="k", language="hi-IN", model="prisma-v2.5", fmt="transcribe")
+    assert headers["x-api-key-id"] == "k"
+    assert headers["language_code"] == "hi-IN"
+    assert headers["model"] == "prisma-v2.5"
+    assert headers["format"] == "transcribe"
+    assert headers["x-sample-rate"] == "16000"
+
+
+def test_frame_splitter_splits_exact_1024_byte_frames():
+    splitter = gnani_stt.FrameSplitter()
+    frames = splitter.feed(PCM_1024 * 3)
+    assert len(frames) == 3
+    assert all(len(f) == 1024 for f in frames)
+    assert splitter.pad_flush() is None
+
+
+def test_frame_splitter_carries_remainder_across_calls():
+    splitter = gnani_stt.FrameSplitter()
+    # 3200 bytes (a 100ms browser chunk at 16kHz/16-bit) is 3 frames + 128 bytes.
+    chunk = b"\x02\x00" * 1600
+    assert len(chunk) == 3200
+    frames = splitter.feed(chunk)
+    assert len(frames) == 3
+    remainder = splitter.pad_flush()
+    assert remainder is not None
+    assert len(remainder) == 1024
+    assert remainder[:128] == chunk[3072:]
+    assert remainder[128:] == b"\x00" * (1024 - 128)
+
+
+def test_parse_stt_event_kinds():
+    events = [gnani_stt.parse_stt_event(e) for e in _fixture_events()]
     kinds = [e.kind for e in events]
-    assert kinds[0] == "session_begin"
-    assert "vad_start" in kinds and "vad_end" in kinds
-    assert "partial" in kinds
-    final = next(e for e in events if e.kind == "final")
+    assert kinds == ["session_begin", "vad_start", "vad_end", "final"]
+    final = events[-1]
     assert final.text == "Kota mein kitni facilities critical hain?"
     assert final.language == "en-IN"
 
 
 def test_parse_stt_event_error_and_unknown():
-    err = sarvam_stt.parse_stt_event({"event": "error", "is_fatal": True, "message": "boom"})
-    assert err.kind == "error" and err.fatal and err.message == "boom"
-    assert sarvam_stt.parse_stt_event({"event": "something.new"}).kind == "other"
+    err = gnani_stt.parse_stt_event({"type": "error", "message": "boom"})
+    assert err.kind == "error" and err.message == "boom"
+    assert gnani_stt.parse_stt_event({"type": "settings_updated"}).kind == "other"
+
+
+# ------------------------------------------------------------------ socket behaviour
 
 
 @pytest.mark.anyio
-async def test_events_flow_and_flush_and_end_frames():
+async def test_handshake_headers_and_binary_frames_sent():
     received: list[dict] = []
 
     async def on_event(e):
@@ -103,11 +146,12 @@ async def test_events_flow_and_flush_and_end_frames():
 
     events = _fixture_events()
     async with FakeStt(replay_events=events) as srv:
-        handle = await sarvam_stt.open_stt_socket(
-            api_key="test-key", language="auto", model="saaras:v3-realtime",
-            on_event=on_event, base_url=srv.url,
+        handle = await gnani_stt.open_stt_socket(
+            api_key="test-key", language="auto", model="prisma-v2.5", fmt="transcribe",
+            on_event=on_event, url=srv.url,
         )  # fmt: skip
-        await handle.send_audio("QUJD")
+        b64 = base64.b64encode(PCM_1024 * 3 + b"\x03\x00" * 64).decode()  # 3 full frames + 128-byte remainder
+        await handle.send_audio(b64)
         await handle.flush()
         for _ in range(50):
             if len(received) >= len(events):
@@ -115,41 +159,50 @@ async def test_events_flow_and_flush_and_end_frames():
             await asyncio.sleep(0.02)
         await handle.end()
         await asyncio.sleep(0.05)
-    assert [m["event"] for m in srv.connections[0]][:2] == ["audio_input", "flush"]
-    assert srv.connections[0][0]["audio"] == "QUJD"
-    assert srv.connections[0][-1] == {"event": "end"}
-    assert [e["event"] for e in received] == [e["event"] for e in events]
-    assert srv.headers == ["test-key"]
-    for part in ("model=saaras%3Av3-realtime", "stream_type=fast", "endpointing=vad", "silence_duration_ms=500"):
-        assert part in srv.paths[0]
+
+    headers = srv.headers[0]
+    assert headers.get("x-api-key-id") == "test-key"
+    assert headers.get("language_code") == "hi-IN"  # "auto" maps to hi-IN for prisma-v2.5
+    assert headers.get("model") == "prisma-v2.5"
+    assert headers.get("format") == "transcribe"
+    assert headers.get("x-sample-rate") == "16000"
+
+    msgs = srv.connections[0]
+    frame_msgs = [m for kind, m in msgs if kind == "frame"]
+    text_msgs = [m for kind, m in msgs if kind == "text"]
+    # 3 full frames sent immediately, then a padded remainder frame from flush().
+    assert len(frame_msgs) == 4
+    assert all(len(f) == 1024 for f in frame_msgs)
+    assert text_msgs[0] == {"type": "commit"}
+    assert [e["type"] for e in received] == [e["type"] for e in events]
 
 
 @pytest.mark.anyio
-async def test_reconnect_replays_at_most_ten_frames_oldest_dropped():
+async def test_reconnect_replays_preroll_frames():
     async def on_event(_e):
         pass
 
     async with FakeStt(drop_first_after=1) as srv:
-        handle = await sarvam_stt.open_stt_socket(
-            api_key="k", language="auto", model="m", on_event=on_event,
-            base_url=srv.url, reconnect_delay=0.3,
+        handle = await gnani_stt.open_stt_socket(
+            api_key="k", language="en-IN", model="prisma-v2.5", fmt="verbatim",
+            on_event=on_event, url=srv.url, reconnect_delay=0.1,
         )  # fmt: skip
-        await handle.send_audio("f0")
+        first_frame = PCM_1024
+        await handle.send_audio(base64.b64encode(first_frame).decode())
         await asyncio.sleep(0.1)  # server drops the socket, client notices
         assert not handle.connected
-        for i in range(1, 16):
-            await handle.send_audio(f"f{i}")
+        second_frame = b"\x05\x00" * 512
+        await handle.send_audio(base64.b64encode(second_frame).decode())
         for _ in range(100):
-            if handle.connected and srv.connections and len(srv.connections) > 1:
+            if handle.connected and len(srv.connections) > 1:
                 break
             await asyncio.sleep(0.05)
         await asyncio.sleep(0.1)
         assert handle.reconnects == 1
-        await handle.send_audio("live")
-        await asyncio.sleep(0.1)
         await handle.end()
-    replayed = [m["audio"] for m in srv.connections[1] if m["event"] == "audio_input"]
-    assert replayed == [f"f{i}" for i in range(6, 16)] + ["live"]
+
+    replayed = [m for kind, m in srv.connections[1] if kind == "frame"]
+    assert replayed == [second_frame]
 
 
 @pytest.mark.anyio
@@ -164,7 +217,7 @@ async def test_reconnect_failure_calls_on_failed_and_send_raises():
 
     calls = {"n": 0}
     async with FakeStt(drop_first_after=1) as srv:
-        real = sarvam_stt._default_connect
+        real = gnani_stt._default_connect
 
         async def flaky(url, headers):
             calls["n"] += 1
@@ -172,14 +225,14 @@ async def test_reconnect_failure_calls_on_failed_and_send_raises():
                 return await real(url, headers)
             raise OSError("refused")
 
-        handle = await sarvam_stt.open_stt_socket(
-            api_key="k", language="auto", model="m", on_event=on_event, base_url=srv.url,
-            connect=flaky, on_failed=on_failed, max_reconnects=2, reconnect_delay=0.02,
+        handle = await gnani_stt.open_stt_socket(
+            api_key="k", language="en-IN", model="prisma-v2.5", fmt="verbatim", on_event=on_event,
+            url=srv.url, connect=flaky, on_failed=on_failed, max_reconnects=2, reconnect_delay=0.02,
         )  # fmt: skip
-        await handle.send_audio("f0")
+        await handle.send_audio(base64.b64encode(PCM_1024).decode())
         await asyncio.wait_for(failed.wait(), 3)
         assert handle.failed
         with pytest.raises(ConnectionError):
-            await handle.send_audio("f1")
+            await handle.send_audio(base64.b64encode(PCM_1024).decode())
         await handle.end()
     assert calls["n"] == 3  # initial connect plus two failed retries

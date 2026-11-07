@@ -162,12 +162,11 @@ def test_existing_endpoint_additions(client):
     assert len(client.get("/api/v1/beds/forecast").json()["beds"]) == 40
 
 
-# ---------------------------------------------------------------------- briefing (A9), Sarvam mocked
+# ---------------------------------------------------------------------- briefing (A9), the LLM router mocked
 
 
 class _Settings:
-    sarvam_api_key = "key-not-real"
-    sarvam_chat_model = "sarvam-105b"
+    pass
 
 
 class _Logistics:
@@ -189,36 +188,78 @@ def _summary(client):
     return client.get("/api/v1/insights/state-summary").json()
 
 
-def _service(reply, clock=None, key="key-not-real"):
+class _FakeProvider:
+    def __init__(self, model: str):
+        self.model = model
+
+
+class _FakeRouter:
+    """Stands in for `LlmRouter.complete_sync`. `configured=False` reproduces
+    "no key": the service falls back to the template without calling it."""
+
+    def __init__(self, reply, model: str = "gnani-evon-v3.3", configured: bool = True):
+        self.reply = reply
+        self.model = model
+        self.configured = configured
+        self.calls: list[dict] = []
+
+    def complete_sync(self, **kw):
+        self.calls.append(kw)
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        from app.llm.client import ChatResult
+
+        return ChatResult(content=self.reply, tool_calls=None, finish_reason="stop"), _FakeProvider(self.model)
+
+
+def _service(reply, clock=None, key="key-not-real", model: str = "gnani-evon-v3.3"):
     from app.services.briefing_service import BriefingService
 
-    settings = _Settings()
-    settings.sarvam_api_key = key
-    svc = BriefingService(settings, None, _Logistics(), **({"clock": clock} if clock else {}))
-    calls = []
-
-    def post(payload):
-        calls.append(payload)
-        if isinstance(reply, Exception):
-            raise reply
-        return {"choices": [{"message": {"content": reply}}]}
-
-    svc._post = post
-    return svc, calls
+    router = _FakeRouter(reply, model=model, configured=bool(key))
+    svc = BriefingService(_Settings(), None, _Logistics(), router, **({"clock": clock} if clock else {}))
+    return svc, router.calls
 
 
-def test_briefing_parses_sarvam_reply_and_sends_the_contract(client):
+def test_briefing_parses_llm_reply_and_sends_the_contract(client):
     summary = _summary(client)
     svc, calls = _service(REPLY)
     out = svc.briefing(summary, 1)
-    assert out["model"] == "sarvam-105b" and out["cached"] is False
+    assert out["model"] == "gnani-evon-v3.3" and out["cached"] is False
     assert out["text"].startswith("Rajasthan has 40 facilities")
     assert out["bullets"][0] == "PHC Kota-4 needs attention on stock" and len(out["bullets"]) == 3
     payload = calls[0]
-    assert payload["reasoning_effort"] is None and payload["temperature"] == 0.3
-    assert payload["max_tokens"] == 400 and payload["stream"] is False
+    assert payload["temperature"] == 0.3 and payload["max_tokens"] == 400
     assert "never invent" in payload["messages"][0]["content"]
     assert '"totals"' in payload["messages"][1]["content"]
+
+
+def test_briefing_falls_back_to_gemini_when_evon_fails(client, monkeypatch):
+    """A real LlmRouter (Evon first, Gemini fallback) answers through Gemini
+    when Evon errors; the briefing's `model` names whichever one answered."""
+    from app.core.config import get_settings
+    from app.llm import client as llm_client
+    from app.llm.client import ChatResult
+    from app.llm.router import LlmRouter
+    from app.services.briefing_service import BriefingService
+
+    settings = get_settings().model_copy(
+        update={"evon_base_url": "http://localhost:8000/v1", "gemini_api_key": "test-key"}
+    )
+
+    def fake_sync(*, provider, **kw):
+        if provider.name == "evon":
+            from app.llm.client import LlmHTTPError
+
+            raise LlmHTTPError(503, "down", provider="evon")
+        return ChatResult(content=REPLY, tool_calls=None, finish_reason="stop")
+
+    monkeypatch.setattr(llm_client, "chat_completion_sync", fake_sync)
+    from app.llm.router import build_providers
+
+    router = LlmRouter(build_providers(settings))
+    svc = BriefingService(settings, None, _Logistics(), router)
+    out = svc.briefing(_summary(client), 1)
+    assert out["model"] == settings.gemini_model
 
 
 def test_briefing_cache_hit_and_expiry(client):
