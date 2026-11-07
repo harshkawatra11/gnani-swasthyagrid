@@ -33,6 +33,17 @@ function FitBounds({ points }: { points: readonly LatLng[] }) {
   return null;
 }
 
+/** Leaflet caches its container's size at creation; a flex-sized map (height computed from
+ * the viewport rather than a fixed number) needs an explicit invalidateSize() whenever that
+ * computed height actually changes, or panning/zoom math uses the stale size. */
+function InvalidateOnResize({ height }: { height: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+  }, [map, height]);
+  return null;
+}
+
 export type BaseMapProps = {
   height?: number;
   /** Points to frame (all loaded facilities, for example). */
@@ -70,6 +81,7 @@ export function BaseMap({ height = 420, fitPoints = [], scrollWheelZoom = false,
         />
         <ZoomControl position="bottomright" />
         <FitBounds points={fitPoints} />
+        <InvalidateOnResize height={height} />
         {children}
       </MapContainer>
     </div>

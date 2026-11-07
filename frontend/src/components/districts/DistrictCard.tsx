@@ -20,6 +20,7 @@ export function DistrictCard({
   facilityName,
   selected,
   dimmed,
+  compact,
 }: {
   row: DistrictSummaryRow;
   rank: number;
@@ -30,8 +31,55 @@ export function DistrictCard({
   facilityName?: string;
   selected?: boolean;
   dimmed?: boolean;
+  /** One-screen layout: a shorter card with no sparkline or link row, just the
+   * gauge, risk mix and top shortage, so five cards plus the tabbed panel below
+   * fit without a page scroll. */
+  compact?: boolean;
 }) {
   const values = series.map((p) => p.actual ?? p.predicted ?? 0);
+  const header = (
+    <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+      <Link href={`/districts/${row.district_id}`} className="flex min-w-0 items-center gap-1 text-[13px] font-semibold text-text hover:text-brand">
+        <span className="truncate">{shortName(row.name)}</span>
+        <ArrowUpRight size={12} className="shrink-0 text-faint" aria-hidden />
+      </Link>
+      <span className="num shrink-0 rounded-sm bg-surface-3 px-1.5 py-0.5 text-[10px] text-muted">#{rank} of 5</span>
+    </header>
+  );
+
+  if (compact) {
+    return (
+      <article
+        className={cn(
+          "flex min-w-0 flex-col rounded-md border bg-surface-1 shadow-[var(--inset-highlight)] transition-opacity",
+          selected ? "border-brand" : "border-border",
+          dimmed && "opacity-60",
+        )}
+        aria-label={`${shortName(row.name)} district card`}
+      >
+        {header}
+        <div className="flex flex-col items-center px-3 pt-1.5">
+          <Gauge value={row.risk_index} scale={RISK_INDEX_SCALE} label="Risk index" size={76} />
+        </div>
+        <div className="space-y-1.5 px-3 pb-2 pt-1">
+          <RiskMixBar counts={row.risk_counts} />
+          <p className="truncate text-[11px] leading-snug text-muted">
+            {shortage ? (
+              <>
+                Top shortage: {shortMedicine(shortage.medicine)}{" "}
+                <span className="num" style={{ color: shortage.days < 3 ? "var(--risk-critical)" : "var(--text)" }}>
+                  {shortage.days.toFixed(1)}d
+                </span>
+              </>
+            ) : (
+              "No shortage"
+            )}
+          </p>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article
       className={cn(
@@ -41,13 +89,7 @@ export function DistrictCard({
       )}
       aria-label={`${shortName(row.name)} district card`}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <Link href={`/districts/${row.district_id}`} className="flex min-w-0 items-center gap-1 text-[13px] font-semibold text-text hover:text-brand">
-          <span className="truncate">{shortName(row.name)}</span>
-          <ArrowUpRight size={12} className="shrink-0 text-faint" aria-hidden />
-        </Link>
-        <span className="num shrink-0 rounded-sm bg-surface-3 px-1.5 py-0.5 text-[10px] text-muted">#{rank} of 5</span>
-      </header>
+      {header}
       <div className="flex flex-col items-center px-3 pt-3">
         <Gauge value={row.risk_index} scale={RISK_INDEX_SCALE} label="Risk index" />
       </div>

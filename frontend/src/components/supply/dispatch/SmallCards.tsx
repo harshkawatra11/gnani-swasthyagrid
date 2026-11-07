@@ -76,7 +76,7 @@ export function VehiclesInTransitCard() {
       footer={<SourceLine source="live fleet state" sub="Supply chain / Dispatch" />}
       className="overflow-hidden"
     >
-      <div className="relative min-h-[112px]">
+      <div className="relative min-h-0">
         <div className="relative z-[1]">
           <span className={`num text-[12px] font-medium ${delayed > 0 ? "text-orange" : "text-green"}`}>
             {delayed > 0 ? `+${delayed} delayed` : "0 delayed"}

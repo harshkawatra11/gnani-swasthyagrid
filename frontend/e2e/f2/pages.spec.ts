@@ -15,15 +15,20 @@ test.describe("F2 districts", () => {
     await noRawIds(page);
   });
 
-  test("scope switch changes content", async ({ page }) => {
+  test("scope switch highlights the scoped district card", async ({ page }) => {
     await page.goto("/districts");
     await expect(page.getByLabel(/district card$/)).toHaveCount(5, { timeout: 20_000 });
-    const before = await page.getByRole("link", { name: /Critical facilities/ }).first().innerText();
     await page.goto("/districts?d=district_kota");
-    await expect(page.getByLabel("Kota district card")).toBeVisible({ timeout: 20_000 });
-    await expect
-      .poll(async () => page.getByRole("link", { name: /Critical facilities/ }).first().innerText(), { timeout: 20_000 })
-      .not.toBe(before);
+    const kota = page.getByLabel("Kota district card");
+    await expect(kota).toBeVisible({ timeout: 20_000 });
+    await expect(kota).toHaveClass(/border-brand/);
+  });
+
+  test("the medicine cover tab shows the heatmap", async ({ page }) => {
+    await page.goto("/districts");
+    await expect(page.getByLabel(/district card$/)).toHaveCount(5, { timeout: 20_000 });
+    await page.getByRole("radio", { name: "Medicine cover" }).click();
+    await expect(page.getByText("Emergency medicines").or(page.getByText("Essential medicines")).first()).toBeVisible({ timeout: 20_000 });
   });
 });
 

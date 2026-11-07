@@ -10,11 +10,9 @@ import { useScope } from "@/lib/scope";
 import type { MapFacility } from "@/components/map/FacilityLayer";
 import type { MapWarehouse } from "@/components/map/WarehouseLayer";
 import { DispatchMap } from "./DispatchMap";
-import { ExceptionsCard, KpiBand } from "./LowerBand";
-import { OrdersCard } from "./OrdersCard";
+import { DispatchRail } from "./DispatchRail";
 import { StatusOverviewCard, VehiclesInTransitCard } from "./SmallCards";
 import { VolumeCard } from "./VolumeCard";
-import { ProvenanceFooter } from "./SourceLine";
 import { dispatchTitle } from "./helpers";
 
 export function DispatchView() {
@@ -43,7 +41,7 @@ export function DispatchView() {
   );
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3 lg:h-[calc(100dvh-136px)] lg:overflow-hidden">
       <h1 className="sr-only">Dispatch: live shipment map</h1>
       <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-muted">
@@ -61,35 +59,28 @@ export function DispatchView() {
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex min-w-0 flex-col gap-3">
-          <DispatchMap
-            shipments={shipments}
-            kpis={kpis}
-            warehouses={warehouses}
-            facilities={facilities}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            detail={detail}
-          />
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <VolumeCard />
-            <div className="flex flex-col gap-3">
-              <StatusOverviewCard />
-              <VehiclesInTransitCard />
-            </div>
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="flex min-h-0 min-w-0 flex-col gap-3">
+          <div className="h-[340px] lg:h-auto lg:min-h-0 lg:flex-1">
+            <DispatchMap
+              shipments={shipments}
+              kpis={kpis}
+              warehouses={warehouses}
+              facilities={facilities}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              detail={detail}
+              fill
+            />
+          </div>
+          <div className="grid shrink-0 gap-3 md:grid-cols-3">
+            <VolumeCard compact />
+            <StatusOverviewCard />
+            <VehiclesInTransitCard />
           </div>
         </div>
-        <div className="relative min-h-[520px] lg:min-h-0">
-          <div className="lg:absolute lg:inset-0">
-            <OrdersCard shipments={shipments} total={ship?.total ?? shipments.length} simNow={simNow} selectedId={selectedId} onSelect={setSelectedId} />
-          </div>
-        </div>
+        <DispatchRail shipments={shipments} total={ship?.total ?? shipments.length} simNow={simNow} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
-
-      <KpiBand />
-      <ExceptionsCard shipments={shipments} />
-      <ProvenanceFooter />
     </div>
   );
 }

@@ -46,7 +46,7 @@ function VolumeTooltip({ active, payload }: TipProps) {
   );
 }
 
-export function VolumeCard() {
+export function VolumeCard({ compact = false }: { compact?: boolean }) {
   const { scope } = useScope();
   const [period, setPeriod] = useState<Period>("month");
   const { data, isLoading } = useVolumeSeries(scope, 90);
@@ -69,16 +69,20 @@ export function VolumeCard() {
       footer={<SourceLine source="simulated shipment history, 90 days; Avg. Time is mean dispatch to arrival per day" sub="Supply chain / Dispatch" />}
     >
       {isLoading || points.length === 0 ? (
-        <Skeleton className="h-[230px] w-full" />
+        <Skeleton className={compact ? "h-[110px] w-full" : "h-[230px] w-full"} />
       ) : (
         <div>
           <ChartLegend
-            items={[
-              { label: "Shipments per day", color: AREA },
-              { label: "Avg. transit time", color: LINE },
-            ]}
+            items={
+              compact
+                ? [{ label: "Shipments per day", color: AREA }]
+                : [
+                    { label: "Shipments per day", color: AREA },
+                    { label: "Avg. transit time", color: LINE },
+                  ]
+            }
           />
-          <div className="h-[120px]" role="group" aria-label="Shipments per day">
+          <div className={compact ? "h-[84px]" : "h-[120px]"} role="group" aria-label="Shipments per day">
             <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height: 120 }}>
               <AreaChart data={points} margin={MARGIN} syncId={`vol-${uid}`}>
                 <defs>
@@ -88,7 +92,11 @@ export function VolumeCard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="label" hide />
+                {compact ? (
+                  <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={28} />
+                ) : (
+                  <XAxis dataKey="label" hide />
+                )}
                 <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={34} domain={[0, "auto"]} />
                 <Tooltip cursor={{ ...CURSOR_LINE, strokeDasharray: "3 3" }} content={<VolumeTooltip />} />
                 <Area
@@ -116,30 +124,34 @@ export function VolumeCard() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div className="h-[70px]" role="group" aria-label="Average transit time in hours">
-            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height: 70 }}>
-              <LineChart data={points} margin={{ ...MARGIN, top: 6 }} syncId={`vol-${uid}`}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={28} />
-                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={34} tickFormatter={(v: number) => `${v}h`} domain={[0, "auto"]} tickCount={3} />
-                <Tooltip cursor={{ ...CURSOR_LINE, strokeDasharray: "3 3" }} content={() => null} />
-                <Line
-                  type="monotone"
-                  dataKey="hours"
-                  name="Avg. Time"
-                  stroke={LINE}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: LINE, stroke: "var(--surface-1)", strokeWidth: 2 }}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="mt-2 text-[12px] text-muted">
-            Read: the upper panel counts shipments, the lower panel shows how long each takes. Two panels share one time axis
-            because the units differ.
-          </p>
+          {!compact && (
+            <div className="h-[70px]" role="group" aria-label="Average transit time in hours">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height: 70 }}>
+                <LineChart data={points} margin={{ ...MARGIN, top: 6 }} syncId={`vol-${uid}`}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={28} />
+                  <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={34} tickFormatter={(v: number) => `${v}h`} domain={[0, "auto"]} tickCount={3} />
+                  <Tooltip cursor={{ ...CURSOR_LINE, strokeDasharray: "3 3" }} content={() => null} />
+                  <Line
+                    type="monotone"
+                    dataKey="hours"
+                    name="Avg. Time"
+                    stroke={LINE}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: LINE, stroke: "var(--surface-1)", strokeWidth: 2 }}
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {!compact && (
+            <p className="mt-2 text-[12px] text-muted">
+              Read: the upper panel counts shipments, the lower panel shows how long each takes. Two panels share one time
+              axis because the units differ.
+            </p>
+          )}
         </div>
       )}
     </Card>

@@ -7,6 +7,7 @@ import { BaseMapClient } from "@/components/map/client";
 import type { MapFacility } from "@/components/map/FacilityLayer";
 import type { MapWarehouse } from "@/components/map/WarehouseLayer";
 import { useLivePositions } from "@/lib/live/LiveProvider";
+import { useElementSize } from "@/lib/use-element-size";
 import type { LogisticsKpis, ShipmentDetail, ShipmentSummary } from "@/lib/api/types";
 import { anchoredChips, fmtRate, matchesQuery } from "./helpers";
 import type { DispatchRoute } from "./DispatchLayers";
@@ -27,6 +28,7 @@ export function DispatchMap({
   selectedId,
   onSelect,
   detail,
+  fill = false,
 }: {
   shipments: readonly ShipmentSummary[];
   kpis: LogisticsKpis | undefined;
@@ -35,6 +37,9 @@ export function DispatchMap({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   detail: ShipmentDetail | null | undefined;
+  /** One-screen layout: stretch to the parent's measured height (via ResizeObserver)
+   * instead of the fixed MAP_HEIGHT, so the map fills whatever space the page gives it. */
+  fill?: boolean;
 }) {
   const store = useLivePositions();
   const [query, setQuery] = useState("");
@@ -42,6 +47,7 @@ export function DispatchMap({
   const [height, setHeight] = useState(MAP_HEIGHT);
   const [fullscreen, setFullscreen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
+  const [fillRef, fillSize] = useElementSize<HTMLDivElement>();
 
   useEffect(() => {
     const onChange = () => {
@@ -52,6 +58,8 @@ export function DispatchMap({
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+
+  const mapHeight = fullscreen ? height : fill ? Math.max(240, fillSize.height || MAP_HEIGHT) : height;
 
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -84,11 +92,18 @@ export function DispatchMap({
   }, [detail, selectedId]);
 
   return (
-    <div ref={shellRef} className={cn("relative overflow-hidden rounded-lg border border-border bg-surface-1", fullscreen && "rounded-none")}>
-      <p className="border-b border-border px-3 py-1.5 text-[11px] text-muted">Dot and label-edge colors identify shipments. Badges show delivery status.</p>
+    <div
+      ref={shellRef}
+      className={cn(
+        "relative overflow-hidden rounded-lg border border-border bg-surface-1",
+        fullscreen && "rounded-none",
+        fill && !fullscreen && "flex h-full flex-col",
+      )}
+    >
+      <p className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] text-muted">Dot and label-edge colors identify shipments. Badges show delivery status.</p>
       <style>{`.dispatch-map .leaflet-control-zoom{display:none}.dispatch-map .leaflet-control-attribution{background:color-mix(in srgb,var(--surface-1) 70%,transparent);color:var(--text-faint);font-size:10px}.dispatch-map .leaflet-control-attribution a{color:var(--text-muted)}`}</style>
-      <div className="dispatch-map">
-        <BaseMapClient height={height} fitPoints={fitPoints} scrollWheelZoom className="rounded-none border-0">
+      <div ref={fill && !fullscreen ? fillRef : undefined} className={cn("dispatch-map", fill && !fullscreen && "min-h-0 flex-1")}>
+        <BaseMapClient height={mapHeight} fitPoints={fitPoints} scrollWheelZoom className="rounded-none border-0">
           <DispatchLayers
             store={store}
             anchored={anchored}
