@@ -44,7 +44,7 @@ export function FacilityCaseFile({ facilityId }: { facilityId: string }) {
   if (profile.error?.status === 404) {
     return (
       <div>
-        <PageHeader eyebrow="Facilities" title="Facility not found" breadcrumbs={[{ label: "Facilities", href: "/facilities" }, { label: "Not found" }]} />
+        <PageHeader eyebrow="Facilities" title="Facility not found" breadcrumbs={[{ label: "Facilities", href: "/districts" }, { label: "Not found" }]} />
         <p className="text-[13px] text-muted">No facility matches this link.</p>
       </div>
     );
@@ -92,7 +92,7 @@ export function FacilityCaseFile({ facilityId }: { facilityId: string }) {
       <PageHeader
         eyebrow={`Facility case file / ${p.type}`}
         title={p.name}
-        breadcrumbs={[{ label: "Facilities", href: "/facilities" }, { label: dname, href: `/districts/${p.district_id}` }, { label: p.name }]}
+        breadcrumbs={[{ label: "Facilities", href: "/districts" }, { label: dname, href: `/districts/${p.district_id}` }, { label: p.name }]}
         description={caseTitle(p.name, meds, p.inbound)}
         actions={
           <>

@@ -14,7 +14,6 @@ const pages = [
   { route: "/supply", file: "supply.png" },
   { route: "/recommendations", file: "recommendations.png" },
   { route: "/districts", file: "districts.png" },
-  { route: "/map", file: "map.png" },
 ];
 
 const browser = await chromium.launch();

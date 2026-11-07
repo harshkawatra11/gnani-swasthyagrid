@@ -3,7 +3,6 @@ import type {
   ShipmentSummary,
   VehicleSummary,
   WarehouseDetail,
-  WarehouseSummary,
 } from "@/lib/api/types";
 import { fmtInt } from "@/lib/format";
 
@@ -122,15 +121,6 @@ export function planningTitle(t: QueueTotals): string {
 }
 
 /* ---------- warehouses ---------- */
-
-export function warehousesTitle(ws: readonly WarehouseSummary[], nameOf: (id: string) => string = (i) => i): string {
-  if (ws.length === 0) return "No warehouses in this scope";
-  const outbound = ws.reduce((a, w) => a + w.outbound_today, 0);
-  const low = ws.filter((w) => w.low_cover_medicines > 0);
-  if (low.length === 0) return `${outbound} shipments left ${ws.length} warehouses today and no depot is short of cover`;
-  const worst = [...low].sort((a, b) => b.low_cover_medicines - a.low_cover_medicines)[0];
-  return `${low.length} of ${ws.length} warehouses have medicines under 7 days of cover, worst is ${nameOf(worst.id)}`;
-}
 
 export type StockRow = WarehouseDetail["stock"][number];
 

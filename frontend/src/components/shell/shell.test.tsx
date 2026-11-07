@@ -64,11 +64,11 @@ describe("scope", () => {
   });
 
   it("restores the stored scope into the URL on a fresh visit", () => {
-    nav.pathname = "/beds";
+    nav.pathname = "/inventory";
     localStorage.setItem("sg-scope", "district_udaipur");
     const { result } = renderHook(() => useScope(), { wrapper: scopeWrapper });
     expect(result.current.scope).toBe("district_udaipur");
-    expect(nav.replace).toHaveBeenCalledWith("/beds?d=district_udaipur");
+    expect(nav.replace).toHaveBeenCalledWith("/inventory?d=district_udaipur");
   });
 });
 
@@ -78,7 +78,8 @@ describe("sidebar active state", () => {
     expect(findActiveHref("/supply")).toBe("/supply");
     expect(findActiveHref("/supply/fleet")).toBe("/supply/fleet");
     expect(findActiveHref("/districts/district_kota")).toBe("/districts");
-    expect(findActiveHref("/facilities/phc_18")).toBe("/facilities");
+    // Facilities is no longer a sidebar item; only breadcrumbsFor resolves its drill-down page.
+    expect(findActiveHref("/facilities/phc_18")).toBeNull();
     expect(findActiveHref("/suppliers")).toBeNull();
   });
 
@@ -95,9 +96,9 @@ describe("sidebar active state", () => {
 
   it("lists every sidebar route of the plan", () => {
     expect(navItems.map((n) => n.href)).toEqual([
-      "/command", "/voice", "/recommendations", "/districts", "/facilities", "/map",
-      "/supply", "/supply/fleet", "/supply/drivers", "/supply/planning", "/supply/warehouses",
-      "/inventory", "/footfall", "/beds", "/doctors", "/diagnostics", "/analytics",
+      "/command", "/voice", "/recommendations", "/districts",
+      "/supply", "/supply/fleet", "/supply/drivers", "/supply/planning",
+      "/inventory", "/footfall", "/analytics",
     ]);
   });
 
@@ -105,6 +106,12 @@ describe("sidebar active state", () => {
     expect(breadcrumbsFor("/districts/district_kota", () => "Kota District").map((c) => c.label)).toEqual([
       "Districts", "District Comparison", "Kota District",
     ]);
+  });
+
+  it("builds breadcrumbs for the facility drill-down, which has no sidebar item of its own", () => {
+    const crumbs = breadcrumbsFor("/facilities/phc_18", () => "PHC Nindar");
+    expect(crumbs.map((c) => c.label)).toEqual(["Districts", "Facilities", "PHC Nindar"]);
+    expect(crumbs[1]).toEqual({ label: "Facilities", href: "/districts" });
   });
 });
 

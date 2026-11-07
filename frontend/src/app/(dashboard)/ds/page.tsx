@@ -119,7 +119,7 @@ export default function DesignSystemPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile label="Critical facilities" value={10} unit="of 40" tone="critical" href="/facilities" delta={{ value: 2, direction: "down", good: "down" }} sparkline={[12, 11, 12, 11, 10, 10]} hint="Stock cover under 3 days" />
+        <KpiTile label="Critical facilities" value={10} unit="of 40" tone="critical" href="/districts" delta={{ value: 2, direction: "down", good: "down" }} sparkline={[12, 11, 12, 11, 10, 10]} hint="Stock cover under 3 days" />
         <KpiTile label="On-time rate" value="94.2" unit="%" tone="good" delta={{ value: 1.2, direction: "up", good: "up" }} sparkline={[88, 90, 91, 93, 92, 94]} />
         <KpiTile label="In transit" value={fmtInt(12)} sparkline={[3, 5, 4, 8, 9, 12]} />
         <KpiTile label="Delayed" value={2} tone="warning" delta={{ value: 1, direction: "up", good: "down" }} />

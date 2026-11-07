@@ -103,9 +103,9 @@ export function DistrictsLab() {
 
       {/* KPI band: never the main event */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiTile label="Critical facilities" value={tot.risk_counts.critical} unit={`of ${tot.facilities}`} tone="critical" href={withScope("/facilities?risk=critical", scope)} sparkline={spark((r) => r.risk_counts.critical)} hint="Spark: by district" />
+        <KpiTile label="Critical facilities" value={tot.risk_counts.critical} unit={`of ${tot.facilities}`} tone="critical" href={withScope("/recommendations", scope)} sparkline={spark((r) => r.risk_counts.critical)} hint="Spark: by district" />
         <KpiTile label="Stock-out items" value={tot.stockout_items} tone="critical" href={withScope("/inventory", scope)} sparkline={spark((r) => r.stockout_items)} hint="Under 3 days" />
-        <KpiTile label="Beds next week" value={Math.round(tot.bed_next_week_avg)} unit="%" tone={tot.bed_next_week_avg > 85 ? "critical" : "warning"} href={withScope("/beds", scope)} sparkline={spark((r) => r.bed_next_week_avg)} hint="Average occupancy" />
+        <KpiTile label="Beds next week" value={Math.round(tot.bed_next_week_avg)} unit="%" tone={tot.bed_next_week_avg > 85 ? "critical" : "warning"} href={withScope("/districts", scope)} sparkline={spark((r) => r.bed_next_week_avg)} hint="Average occupancy" />
         <KpiTile label="Pending approvals" value={tot.pending_recommendations} href={withScope("/recommendations", scope)} sparkline={spark((r) => r.pending_recommendations)} hint="Awaiting an officer" />
         <KpiTile label="In transit" value={tot.shipments_in_transit} href={withScope("/supply", scope)} sparkline={spark((r) => r.shipments_in_transit)} hint="Shipments on the road" />
         <KpiTile label="On time, 7 days" value={Math.round(tot.on_time_rate_7d * 100)} unit="%" tone={tot.on_time_rate_7d < 0.7 ? "warning" : "good"} href={withScope("/supply", scope)} sparkline={spark((r) => r.on_time_rate_7d * 100)} hint="Simulated deliveries" />

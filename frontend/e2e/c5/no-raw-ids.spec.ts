@@ -8,11 +8,6 @@ const ROUTES = [
   "/recommendations",
   "/inventory",
   "/footfall",
-  "/beds",
-  "/doctors",
-  "/diagnostics",
-  "/map",
-  "/facilities",
   "/analytics",
   "/districts",
   "/supply",
@@ -35,10 +30,3 @@ for (const route of ROUTES) {
     expect(errors).toEqual([]);
   });
 }
-
-test("facilities lists all 40 facility names, none as raw ids", async ({ page }) => {
-  await page.goto("/facilities", { waitUntil: "load" });
-  await page.waitForTimeout(2000);
-  const rows = await page.locator("main button:has(p.text-sm)").count();
-  expect(rows).toBeGreaterThanOrEqual(8);
-});

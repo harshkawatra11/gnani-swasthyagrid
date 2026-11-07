@@ -1,21 +1,16 @@
 import {
   AudioLines,
-  BedDouble,
   Building2,
   CalendarRange,
   Columns3,
-  FlaskConical,
   Footprints,
   LayoutDashboard,
   LineChart,
   ListChecks,
-  Map,
   Pill,
   Radar,
-  Stethoscope,
   Truck,
   Users,
-  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,19 +25,13 @@ export const navItems: NavItem[] = [
   { href: "/voice", label: "Voice Control Room", icon: AudioLines, group: "Command" },
   { href: "/recommendations", label: "Recommendations", icon: ListChecks, group: "Command" },
   { href: "/districts", label: "District Comparison", icon: Columns3, group: "Districts" },
-  { href: "/facilities", label: "Facilities", icon: Building2, group: "Districts" },
-  { href: "/map", label: "Geo Intelligence", icon: Map, group: "Districts" },
   { href: "/supply", label: "Dispatch", icon: Radar, group: "Supply Chain" },
   { href: "/supply/fleet", label: "Fleet", icon: Truck, group: "Supply Chain" },
   { href: "/supply/drivers", label: "Drivers", icon: Users, group: "Supply Chain" },
   { href: "/supply/planning", label: "Load Planning", icon: CalendarRange, group: "Supply Chain" },
-  { href: "/supply/warehouses", label: "Warehouses", icon: Warehouse, group: "Supply Chain" },
   { href: "/inventory", label: "Inventory", icon: Pill, group: "Operations" },
   { href: "/footfall", label: "Footfall", icon: Footprints, group: "Operations" },
-  { href: "/beds", label: "Beds", icon: BedDouble, group: "Operations" },
-  { href: "/doctors", label: "Doctors", icon: Stethoscope, group: "Operations" },
-  { href: "/diagnostics", label: "Diagnostics", icon: FlaskConical, group: "Operations" },
-  { href: "/analytics", label: "Analytics", icon: LineChart, group: "Insights" },
+  { href: "/analytics", label: "Analyst Workbench", icon: LineChart, group: "Insights" },
 ];
 
 /** Drill-down routes of 3.2 that are reached from a list and are not in the sidebar. */
@@ -51,6 +40,14 @@ export const detailRoutes = [
   { pattern: "/facilities/[facilityId]", label: "Facility Profile" },
   { pattern: "/supply/shipments/[shipmentId]", label: "Shipment Tracking" },
 ] as const;
+
+export type CrumbOnlyItem = NavItem & { crumbHref?: string };
+
+/** Pages reached only by drill-down, not in the sidebar, but which still need a
+ * breadcrumb trail (their own group and a link back to where they are reached from). */
+export const breadcrumbOnlyItems: CrumbOnlyItem[] = [
+  { href: "/facilities", crumbHref: "/districts", label: "Facilities", icon: Building2, group: "Districts" },
+];
 
 /** The sidebar item that owns `pathname`: the longest href that is a segment-wise prefix. */
 export function findActiveHref(pathname: string, items: readonly { href: string }[] = navItems): string | null {
@@ -66,10 +63,11 @@ export type Crumb = { label: string; href?: string };
 
 /** Breadcrumbs from the route: group, page, then the drill-down id (resolved by `resolveName`). */
 export function breadcrumbsFor(pathname: string, resolveName: (segment: string) => string = (s) => s): Crumb[] {
-  const activeHref = findActiveHref(pathname);
-  const item = navItems.find((n) => n.href === activeHref);
+  const all: CrumbOnlyItem[] = [...navItems, ...breadcrumbOnlyItems];
+  const activeHref = findActiveHref(pathname, all);
+  const item = all.find((n) => n.href === activeHref);
   if (!item) return [];
-  const crumbs: Crumb[] = [{ label: item.group }, { label: item.label, href: item.href }];
+  const crumbs: Crumb[] = [{ label: item.group }, { label: item.label, href: item.crumbHref ?? item.href }];
   const rest = pathname.slice(item.href.length).split("/").filter(Boolean);
   if (rest.length > 0) crumbs.push({ label: resolveName(decodeURIComponent(rest[rest.length - 1])) });
   return crumbs;

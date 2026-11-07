@@ -24,13 +24,13 @@ const pctFmt = (v: number) => `${Math.round(v)}%`;
 
 export const MATRIX_METRICS: Metric[] = [
   { key: "risk_index", header: "Risk index", get: (r) => r.risk_index, format: int, higherIsWorse: true, href: (r) => `/districts/${r.district_id}` },
-  { key: "critical", header: "Critical", get: (r) => r.risk_counts.critical, format: int, higherIsWorse: true, href: (r) => withScope("/facilities?risk=critical", r.district_id) },
+  { key: "critical", header: "Critical", get: (r) => r.risk_counts.critical, format: int, higherIsWorse: true, href: (r) => withScope("/recommendations", r.district_id) },
   { key: "stockout", header: "Stock-out", get: (r) => r.stockout_items, format: int, higherIsWorse: true, href: (r) => withScope("/inventory", r.district_id) },
   { key: "low_cover", header: "Low", get: (r) => r.low_cover_items, format: int, higherIsWorse: true, href: (r) => withScope("/inventory", r.district_id) },
-  { key: "beds_now", header: "Beds", get: (r) => r.bed_occupancy_avg, format: pctFmt, higherIsWorse: true, href: (r) => withScope("/beds", r.district_id) },
-  { key: "beds_week", header: "Beds +7d", get: (r) => r.bed_next_week_avg, format: pctFmt, higherIsWorse: true, href: (r) => withScope("/beds", r.district_id) },
-  { key: "doctors", header: "Doctors", get: (r) => r.doctors_high_risk, format: int, higherIsWorse: true, href: (r) => withScope("/doctors", r.district_id) },
-  { key: "diag", header: "Diag. down", get: (r) => r.diagnostics_down, format: int, higherIsWorse: true, href: (r) => withScope("/diagnostics", r.district_id) },
+  { key: "beds_now", header: "Beds", get: (r) => r.bed_occupancy_avg, format: pctFmt, higherIsWorse: true, href: (r) => `/districts/${r.district_id}` },
+  { key: "beds_week", header: "Beds +7d", get: (r) => r.bed_next_week_avg, format: pctFmt, higherIsWorse: true, href: (r) => `/districts/${r.district_id}` },
+  { key: "doctors", header: "Doctors", get: (r) => r.doctors_high_risk, format: int, higherIsWorse: true, href: (r) => `/districts/${r.district_id}` },
+  { key: "diag", header: "Diag. down", get: (r) => r.diagnostics_down, format: int, higherIsWorse: true, href: (r) => `/districts/${r.district_id}` },
   { key: "pending", header: "Pending", get: (r) => r.pending_recommendations, format: int, higherIsWorse: true, href: (r) => withScope("/recommendations", r.district_id) },
   { key: "transit", header: "In transit", get: (r) => r.shipments_in_transit, format: int, higherIsWorse: false, href: (r) => withScope("/supply", r.district_id) },
   { key: "ontime", header: "On time 7d", get: (r) => r.on_time_rate_7d * 100, format: pctFmt, higherIsWorse: false, href: (r) => withScope("/supply", r.district_id) },

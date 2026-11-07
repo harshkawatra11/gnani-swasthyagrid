@@ -37,43 +37,11 @@ test.describe("F2 district detail", () => {
   });
 });
 
-test.describe("F2 facilities", () => {
-  test("directory deep link filters by risk", async ({ page }) => {
-    await page.goto("/facilities?risk=critical");
-    const rows = page.locator("table tbody tr");
-    await expect(rows.first()).toBeVisible({ timeout: 20_000 });
-    const n = await rows.count();
-    expect(n).toBeGreaterThan(0);
-    expect(n).toBeLessThan(40);
-    expect(await rows.filter({ hasText: "Critical" }).count()).toBe(n);
-    await noRawIds(page);
-  });
-
-  test("lens switch recolours the tile grid", async ({ page }) => {
-    await page.goto("/facilities");
-    const tile = page.getByTestId("facility-tile").first();
-    await expect(tile).toBeVisible({ timeout: 20_000 });
-    const before = await page.getByTestId("facility-grid").innerText();
-    await page.getByRole("radio", { name: "Beds" }).click();
-    await expect.poll(async () => page.getByTestId("facility-grid").innerText()).not.toBe(before);
-  });
-});
-
 test.describe("F2 facility profile", () => {
   test("case file renders names, not ids", async ({ page }) => {
     await page.goto("/facilities/phc_18");
     await expect(page.getByRole("heading", { level: 1, name: /Rural-14/ })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText("Medicine cover").first()).toBeVisible();
     await noRawIds(page);
-  });
-});
-
-test.describe("F2 geo intelligence", () => {
-  test("console shows layer panel and opens a drawer on a district click", async ({ page }) => {
-    await page.goto("/map");
-    await expect(page.getByLabel("Map layers")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole("checkbox", { name: "Facilities" })).toBeChecked();
-    await page.getByRole("button", { name: /Open drawer for/ }).first().click();
-    await expect(page.getByLabel("Selection details")).toBeVisible();
   });
 });
