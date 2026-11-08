@@ -1790,4 +1790,7 @@ def build_logistics_service(
 ) -> LogisticsService:
     settings = settings or get_settings()
     store = JsonFileStateStore(settings.logistics_state_path)
-    return LogisticsService(repo, forecast, recs, store, settings=settings)
+    scenario_start = (
+        parse_iso(settings.logistics_scenario_start) if settings.logistics_scenario_start else None
+    )
+    return LogisticsService(repo, forecast, recs, store, settings=settings, scenario_start=scenario_start)

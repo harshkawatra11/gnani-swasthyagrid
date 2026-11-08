@@ -29,6 +29,10 @@ def _clear_caches() -> None:
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("LOGISTICS_STATE_PATH", str(tmp_path / "state.json"))
+    # Anchor "now" to the day after the static seed history ends (backend/data/seed_logistics_history.json,
+    # generated with REFERENCE_START = 2026-09-26T03:00:00Z) so 30-day-lookback stats like deliveries_30d
+    # stay non-zero regardless of how far real time has drifted past that fixture's coverage.
+    monkeypatch.setenv("LOGISTICS_SCENARIO_START", "2026-09-26T03:00:00Z")
     _clear_caches()
     return TestClient(app)
 
