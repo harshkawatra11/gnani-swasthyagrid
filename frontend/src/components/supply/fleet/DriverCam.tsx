@@ -13,7 +13,13 @@ const SEC = "Supply chain / Fleet";
  *  labelled as a sample feed rather than presented as a live stream. */
 function CameraFrame({ driverName, moving }: { driverName: string | null; moving: boolean }) {
   return (
-    <svg viewBox="0 0 400 240" role="img" aria-label="Sample in-cab driver camera view" className="h-auto w-full">
+    <svg
+      viewBox="0 0 400 240"
+      preserveAspectRatio="xMidYMid slice"
+      role="img"
+      aria-label="Sample in-cab driver camera view"
+      className="h-56 w-full"
+    >
       <defs>
         <radialGradient id="cam-vignette" cx="50%" cy="42%" r="75%">
           <stop offset="55%" stopColor="#0c1116" stopOpacity={0} />
@@ -79,28 +85,30 @@ export function DriverCam({ driverName, moving }: { driverName: string | null; m
   }, []);
 
   return (
-    <Card
-      eyebrow="Driver cam"
-      title={driverName ? `${driverName}, sample feed` : "No driver assigned"}
-      footer={<SourceFooter source="illustrative sample feed, not a real camera" section={SEC} />}
-    >
-      <div className="relative overflow-hidden rounded-md border border-border">
-        <CameraFrame driverName={driverName} moving={moving} />
-        <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-sm bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-          <span className={moving ? "h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--red)]" : "h-1.5 w-1.5 rounded-full bg-[var(--text-faint)]"} aria-hidden />
-          {moving ? "Sample feed" : "Idle"}
+    <div data-testid="driver-cam">
+      <Card
+        eyebrow="Driver cam"
+        title={driverName ? `${driverName}, sample feed` : "No driver assigned"}
+        footer={<SourceFooter source="illustrative sample feed, not a real camera" section={SEC} />}
+      >
+        <div className="relative overflow-hidden rounded-md border border-border">
+          <CameraFrame driverName={driverName} moving={moving} />
+          <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-sm bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+            <span className={moving ? "h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--red)]" : "h-1.5 w-1.5 rounded-full bg-[var(--text-faint)]"} aria-hidden />
+            {moving ? "Sample feed" : "Idle"}
+          </div>
+          <div className="absolute right-2 top-2 flex items-center gap-1 rounded-sm bg-black/55 px-2 py-1 text-[10px] text-white/80">
+            <Camera size={11} aria-hidden />
+            Cab camera
+          </div>
+          {now && (
+            <div className="num absolute bottom-2 right-2 rounded-sm bg-black/55 px-2 py-1 text-[10px] text-white/80">{now}</div>
+          )}
         </div>
-        <div className="absolute right-2 top-2 flex items-center gap-1 rounded-sm bg-black/55 px-2 py-1 text-[10px] text-white/80">
-          <Camera size={11} aria-hidden />
-          Cab camera
-        </div>
-        {now && (
-          <div className="num absolute bottom-2 right-2 rounded-sm bg-black/55 px-2 py-1 text-[10px] text-white/80">{now}</div>
-        )}
-      </div>
-      <p className="mt-2 text-[11px] text-muted">
-        A drawn placeholder standing in for an in-cab camera. No vehicle in this demo carries real camera hardware.
-      </p>
-    </Card>
+        <p className="mt-2 text-[11px] text-muted">
+          A drawn placeholder standing in for an in-cab camera. No vehicle in this demo carries real camera hardware.
+        </p>
+      </Card>
+    </div>
   );
 }
