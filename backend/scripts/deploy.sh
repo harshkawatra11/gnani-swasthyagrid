@@ -16,12 +16,13 @@ IMAGE="${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/swasthyagrid/${SERVICE}"
 ENV_FILE="${ENV_FILE:-deploy.env.yaml}"
 
 echo "Building image ${IMAGE}..."
-gcloud builds submit --tag "${IMAGE}" .
+gcloud builds submit --tag "${IMAGE}" --project "${GCP_PROJECT_ID}" .
 
 echo "Deploying to Cloud Run (${REGION})..."
 gcloud run deploy "${SERVICE}" \
   --image "${IMAGE}" \
   --region "${REGION}" \
+  --project "${GCP_PROJECT_ID}" \
   --platform managed \
   --allow-unauthenticated \
   --min-instances 0 \

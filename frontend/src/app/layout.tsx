@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "SwasthyaGrid AI",
     description: "Predictive · Prescriptive · Explainable · Human-Governed",
-    url: "https://swasthyagrid.vercel.app",
+    url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://gnani-swasthyagrid.vercel.app",
     siteName: "SwasthyaGrid AI",
     locale: "en_IN",
     type: "website",
