@@ -24,11 +24,11 @@ test.describe("F2 districts", () => {
     await expect(kota).toHaveClass(/border-brand/);
   });
 
-  test("the medicine cover tab shows the heatmap", async ({ page }) => {
+  test("the medicine heatmap and footfall forecast render alongside the matrix", async ({ page }) => {
     await page.goto("/districts");
     await expect(page.getByLabel(/district card$/)).toHaveCount(5, { timeout: 20_000 });
-    await page.getByRole("radio", { name: "Medicine cover" }).click();
     await expect(page.getByText("Emergency medicines").or(page.getByText("Essential medicines")).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Footfall forecast")).toBeVisible();
   });
 });
 

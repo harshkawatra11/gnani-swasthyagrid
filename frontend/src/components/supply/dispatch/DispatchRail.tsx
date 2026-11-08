@@ -6,7 +6,6 @@ import { ArrowUpRight, ChevronLeft, ChevronRight, Snowflake } from "lucide-react
 import { DataTable, type Column } from "@/components/ds/DataTable";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { Select } from "@/components/ds/Select";
-import { SegmentedControl } from "@/components/ds/SegmentedControl";
 import { StatusChip } from "@/components/ds/StatusChip";
 import { cn } from "@/lib/cn";
 import { useScope, withScope } from "@/lib/scope";
@@ -21,8 +20,10 @@ import { SourceLine } from "./SourceLine";
 // about 128px tall at the default text size. Pagination sizes itself off this estimate
 // rather than off a scrollbar, so the rail never scrolls.
 const ORDER_ROW_PX = 128;
-
-type RailTab = "orders" | "exceptions";
+// Exceptions sit in a fixed strip at the bottom of the rail (header + up to 4 compact
+// rows), so Orders and Exceptions are both visible at once rather than tabbed.
+const EXCEPTIONS_STRIP_PX = 208;
+const EXCEPTIONS_SHOWN = 4;
 
 /** Route block from the reference: filled marker on top, dashed line, diamond at the bottom. */
 function OrderRoute({ from, to }: { from: string; to: string }) {
@@ -143,14 +144,16 @@ export function DispatchRail({
   onSelect: (id: string) => void;
 }) {
   const { scope } = useScope();
-  const [tab, setTab] = useState<RailTab>("orders");
   const [period, setPeriod] = useState<OrderPeriod>("all");
   const [listRef, listSize] = useElementSize<HTMLUListElement>();
 
   const orderRows = useMemo(() => sortOrders(filterOrders([...shipments], period, simNow)), [shipments, period, simNow]);
   const excRows = useMemo(() => exceptionRows(shipments), [shipments]);
+  const excShown = excRows.slice(0, EXCEPTIONS_SHOWN);
 
-  const pageSize = Math.max(3, Math.floor((listSize.height || 400) / ORDER_ROW_PX));
+  // listRef is on the <ul> itself, which flexbox already shrinks to "whatever is left"
+  // once the header, pager strip, fixed exceptions strip and footer take their space.
+  const pageSize = Math.max(2, Math.floor((listSize.height || 300) / ORDER_ROW_PX));
   const pager = usePager(orderRows, pageSize);
 
   useEffect(() => {
@@ -182,88 +185,75 @@ export function DispatchRail({
       sortable: true,
       cell: (r) => (
         <div className="flex items-center gap-2">
-          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-3">
+          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-3">
             <div className="h-full rounded-full" style={{ width: `${Math.min(100, (r.delay_minutes / maxDelay) * 100)}%`, background: "var(--status-delayed)" }} />
           </div>
           <span className="num text-muted">{fmtDuration(r.delay_minutes)}</span>
         </div>
       ),
     },
-    { key: "why", header: "Reason", accessor: (r) => r.blocked_reason ?? "", cell: (r) => <span className="text-muted">{r.blocked_reason ?? (r.status === "delayed" ? "Incident on route" : "Behind plan")}</span> },
   ];
 
   return (
     <section className="flex h-full flex-col rounded-md border border-border bg-surface-1 shadow-[var(--inset-highlight)]">
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
-          <p className="eyebrow">{tab === "orders" ? "Orders" : "Exceptions"}</p>
-          <h3 className="num text-[13px] font-semibold text-text">
-            {tab === "orders" ? `Total: ${total}` : excRows.length === 0 ? "None behind plan" : `${excRows.length} behind plan`}
-          </h3>
+          <p className="eyebrow">Orders</p>
+          <h3 className="num text-[13px] font-semibold text-text">Total: {total}</h3>
         </div>
-        <div className="flex items-center gap-2">
-          {tab === "orders" && (
-            <Select
-              ariaLabel="Orders period"
-              value={period}
-              onValueChange={(v) => setPeriod(v as OrderPeriod)}
-              options={(Object.keys(ORDER_PERIOD_LABEL) as OrderPeriod[]).map((p) => ({ value: p, label: ORDER_PERIOD_LABEL[p] }))}
-            />
-          )}
-          <SegmentedControl
-            ariaLabel="Dispatch rail view"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: "orders", label: "Orders" },
-              { value: "exceptions", label: "Exceptions" },
-            ]}
-          />
-        </div>
+        <Select
+          ariaLabel="Orders period"
+          value={period}
+          onValueChange={(v) => setPeriod(v as OrderPeriod)}
+          options={(Object.keys(ORDER_PERIOD_LABEL) as OrderPeriod[]).map((p) => ({ value: p, label: ORDER_PERIOD_LABEL[p] }))}
+        />
       </header>
 
-      {tab === "orders" ? (
-        orderRows.length === 0 ? (
-          <div className="flex-1 p-4">
-            <EmptyState icon={ArrowUpRight} title="No orders in this window" body="Widen the period to see earlier shipments." />
-          </div>
-        ) : (
-          <ul ref={listRef} data-testid="orders-list" className="min-h-0 flex-1">
-            {pager.slice.map((s) => (
-              <OrderRow
-                key={s.id}
-                s={s}
-                selected={s.id === selectedId}
-                onSelect={onSelect}
-                href={withScope(`/supply/shipments/${s.id}`, scope)}
-              />
-            ))}
-          </ul>
-        )
-      ) : excRows.length === 0 ? (
+      {orderRows.length === 0 ? (
         <div className="flex-1 p-4">
-          <EmptyState icon={ArrowUpRight} title="All clear" body="No shipment is behind plan or blocked." />
+          <EmptyState icon={ArrowUpRight} title="No orders in this window" body="Widen the period to see earlier shipments." />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto" data-testid="exceptions-table">
-          <DataTable columns={excCols} rows={excRows} rowKey={(r) => r.id} density="compact" initialSort={{ key: "delay", dir: "desc" }} empty={<p className="p-4 text-muted">All clear.</p>} />
-        </div>
+        <ul ref={listRef} data-testid="orders-list" className="min-h-0 flex-1">
+          {pager.slice.map((s) => (
+            <OrderRow
+              key={s.id}
+              s={s}
+              selected={s.id === selectedId}
+              onSelect={onSelect}
+              href={withScope(`/supply/shipments/${s.id}`, scope)}
+            />
+          ))}
+        </ul>
       )}
 
-      <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-2 text-[11px] text-faint">
-        <div className="min-w-0 flex-1">
-          <SourceLine source="simulated shipment ledger" sub="Supply chain / Dispatch" />
-        </div>
-        {tab === "orders" && orderRows.length > 0 && (
-          <PagerControls
-            from={pager.from}
-            to={pager.to}
-            total={pager.total}
-            onPrev={pager.prev}
-            onNext={pager.next}
-            disabled={{ prev: pager.page === 0, next: pager.page >= pager.pages - 1 }}
-          />
+      <div className="flex items-center justify-between gap-2 border-y border-border px-4 py-1.5 text-[11px] text-faint">
+        <PagerControls
+          from={pager.from}
+          to={pager.to}
+          total={pager.total}
+          onPrev={pager.prev}
+          onNext={pager.next}
+          disabled={{ prev: pager.page === 0, next: pager.page >= pager.pages - 1 }}
+        />
+        <span className="num">{excRows.length === 0 ? "No exceptions" : `${excRows.length} exception${excRows.length === 1 ? "" : "s"}`}</span>
+      </div>
+
+      {/* Exceptions: always visible, a fixed-height strip rather than a second tab. */}
+      <div className="shrink-0" style={{ height: EXCEPTIONS_STRIP_PX }} data-testid="exceptions-table">
+        {excShown.length === 0 ? (
+          <div className="flex h-full items-center justify-center p-4">
+            <EmptyState icon={ArrowUpRight} title="All clear" body="No shipment is behind plan or blocked." />
+          </div>
+        ) : (
+          <div className="h-full overflow-y-auto">
+            <DataTable columns={excCols} rows={excShown} rowKey={(r) => r.id} density="compact" stickyHeader initialSort={{ key: "delay", dir: "desc" }} empty={<p className="p-4 text-muted">All clear.</p>} />
+          </div>
         )}
+      </div>
+
+      <footer className="border-t border-border px-4 py-2 text-[11px] text-faint">
+        <SourceLine source="simulated shipment ledger" sub="Supply chain / Dispatch" />
       </footer>
     </section>
   );

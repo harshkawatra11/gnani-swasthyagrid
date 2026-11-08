@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo } from "react";
 import { Skeleton } from "@/components/ds/Skeleton";
+import { KpiTile } from "@/components/ds/KpiTile";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { HeatmapMatrix } from "@/components/ds/HeatmapMatrix";
-import { SegmentedControl } from "@/components/ds/SegmentedControl";
 import { MultiLineForecast } from "@/components/charts/MultiLineForecast";
 import { seriesColor } from "@/components/charts/common";
 import { useMedicineMatrix, useStateSummary } from "@/lib/api/hooks";
 import { useElementSize } from "@/lib/use-element-size";
-import { useScope } from "@/lib/scope";
+import { useScope, withScope } from "@/lib/scope";
 import { ComparisonMatrix } from "./ComparisonMatrix";
 import { DistrictCard } from "./DistrictCard";
 import { useDistrictFootfalls, toSeries } from "./data";
@@ -24,20 +24,13 @@ import {
   topShortage,
 } from "./metrics";
 
-type Tab = "matrix" | "medicine" | "footfall";
-const TAB_OPTIONS = [
-  { value: "matrix" as const, label: "Comparison matrix" },
-  { value: "medicine" as const, label: "Medicine cover" },
-  { value: "footfall" as const, label: "Footfall forecast" },
-];
-
 export function DistrictsLab() {
   const { scope } = useScope();
   const all = useStateSummary("all");
   const matrix = useMedicineMatrix("all");
   const footfalls = useDistrictFootfalls();
-  const [tab, setTab] = useState<Tab>("matrix");
-  const [bodyRef, body] = useElementSize<HTMLDivElement>();
+  const [heatBodyRef, heatBody] = useElementSize<HTMLDivElement>();
+  const [forecastBodyRef, forecastBody] = useElementSize<HTMLDivElement>();
 
   const summary = all.data;
   const rows = useMemo(() => summary?.districts ?? [], [summary]);
@@ -70,6 +63,8 @@ export function DistrictsLab() {
   const rankOf = (id: string) => ranked.findIndex((r) => r.district_id === id) + 1;
   const mdata = matrix.data;
   const top = ranked[0];
+  const tot = summary.totals;
+  const spark = (f: (r: (typeof rows)[number]) => number) => rows.map(f);
 
   const peaks = rows
     .map((r) => {
@@ -94,32 +89,9 @@ export function DistrictsLab() {
   const forecastFrom = (series[rows[0].district_id] ?? []).find((p) => p.actual === undefined)?.day;
 
   // Fall back to a sensible size on the first paint (ResizeObserver has not fired yet) or in jsdom.
-  const bodyHeight = body.height || 320;
   const sortedMeds = [...mdata.medicines].sort((a, b) => Number(b.emergency) - Number(a.emergency));
-  const heatCell = Math.min(38, Math.max(20, Math.floor((bodyHeight - 56) / (sortedMeds.length + 1.5))));
-  const chartHeight = Math.max(160, bodyHeight - 44);
-
-  const tabMeta: Record<Tab, { eyebrow: string; title: ReactNode; source: string; read: ReactNode }> = {
-    matrix: {
-      eyebrow: "Comparison matrix",
-      title: `${shortName(top.name)} leads on ${rows.length > 1 ? "risk index" : "risk"}; each column is coloured against the other four districts`,
-      source: "Source: SwasthyaGrid insights/state-summary. Colours rank each metric across districts. Click a cell for the rows behind it.",
-      read: "Read across a row to see where a district is weak, down a column to see who is the outlier.",
-    },
-    medicine: {
-      eyebrow: "Lowest days of cover, medicine by district",
-      title: heatTitle(mdata),
-      source: "Source: insights/medicine-matrix, days of cover = units / average daily use",
-      read: "Red cells are under 3 days. Click a cell to open the inventory for that district.",
-    },
-    footfall: {
-      eyebrow: "Footfall forecast, five districts",
-      title: footfallTitle(peaks[0] ?? null),
-      source: "Source: footfall/forecast per district, actual up to Friday, model forecast after",
-      read: "Lines share one axis. Districts that rise together need the same surge stock.",
-    },
-  };
-  const meta = tabMeta[tab];
+  const heatCell = Math.min(34, Math.max(16, Math.floor(((heatBody.height || 220) - 30) / (sortedMeds.length + 1.5))));
+  const chartHeight = Math.max(120, (forecastBody.height || 220) - 36);
 
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100dvh-136px)] lg:overflow-hidden">
@@ -136,6 +108,16 @@ export function DistrictsLab() {
           />
         }
       />
+
+      {/* KPI band: state totals, never the main event but part of the at-a-glance read */}
+      <div className="grid shrink-0 grid-cols-3 gap-3 md:grid-cols-6">
+        <KpiTile label="Critical facilities" value={tot.risk_counts.critical} unit={`of ${tot.facilities}`} tone="critical" href={withScope("/recommendations", scope)} sparkline={spark((r) => r.risk_counts.critical)} className="p-2.5" />
+        <KpiTile label="Stock-out items" value={tot.stockout_items} tone="critical" href={withScope("/inventory", scope)} sparkline={spark((r) => r.stockout_items)} className="p-2.5" />
+        <KpiTile label="Beds next week" value={Math.round(tot.bed_next_week_avg)} unit="%" tone={tot.bed_next_week_avg > 85 ? "critical" : "warning"} href={withScope("/districts", scope)} sparkline={spark((r) => r.bed_next_week_avg)} className="p-2.5" />
+        <KpiTile label="Pending approvals" value={tot.pending_recommendations} href={withScope("/recommendations", scope)} sparkline={spark((r) => r.pending_recommendations)} className="p-2.5" />
+        <KpiTile label="In transit" value={tot.shipments_in_transit} href={withScope("/supply", scope)} sparkline={spark((r) => r.shipments_in_transit)} className="p-2.5" />
+        <KpiTile label="On time, 7 days" value={Math.round(tot.on_time_rate_7d * 100)} unit="%" tone={tot.on_time_rate_7d < 0.7 ? "warning" : "good"} href={withScope("/supply", scope)} sparkline={spark((r) => r.on_time_rate_7d * 100)} className="p-2.5" />
+      </div>
 
       {/* Hero: five identical small multiples */}
       <section aria-label="District small multiples" className="shrink-0">
@@ -164,52 +146,71 @@ export function DistrictsLab() {
         </div>
       </section>
 
-      <InsightCard
-        className="min-h-0 flex-1"
-        eyebrow={meta.eyebrow}
-        title={meta.title}
-        section="Districts / Matrix"
-        source={meta.source}
-        read={meta.read}
-        bodyClassName={tab === "matrix" ? "min-h-0 flex-1 p-0" : "min-h-0 flex-1"}
-        actions={<SegmentedControl value={tab} onChange={setTab} options={TAB_OPTIONS} ariaLabel="District comparison view" />}
-      >
-        <div ref={bodyRef} className="h-full min-h-[200px] lg:min-h-0">
-          {tab === "matrix" && <ComparisonMatrix rows={rows} scope={scope} />}
-          {tab === "medicine" && (
-            <>
-              <HeatmapMatrix
-                rows={sortedMeds.map((m) => ({ id: m.name, label: shortMedicine(m.name), group: m.emergency ? "Emergency medicines" : "Essential medicines" }))}
-                cols={mdata.districts.map((d) => ({ id: d.id, label: shortName(d.name) }))}
-                value={(rid, cid) => mdata.cells.find((c) => c.medicine_name === rid && c.district_id === cid)?.min_days_remaining ?? null}
-                scale={COVER_SCALE}
-                format={(v) => `${v}d`}
-                cellSize={heatCell}
-              />
-              {worstCell && worstDistrict && (
-                <div className="mt-2">
-                  <Callout tone="critical">
-                    {shortMedicine(worstCell.medicine_name)} in {shortName(worstDistrict.name)}: {worstCell.min_days_remaining} days, {worstCell.facilities_below_threshold} facilities below threshold
-                  </Callout>
-                </div>
-              )}
-            </>
+      {/* Dense row: comparison matrix, medicine cover heatmap and footfall forecast, all at once */}
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-12">
+        <InsightCard
+          className="min-h-0 lg:col-span-5"
+          eyebrow="Comparison matrix"
+          title={`${shortName(top.name)} leads on ${rows.length > 1 ? "risk index" : "risk"}; each column is coloured against the other four districts`}
+          section="Districts / Matrix"
+          source="Source: insights/state-summary. Colours rank each metric across districts."
+          bodyClassName="min-h-0 flex-1 overflow-auto p-0"
+        >
+          <ComparisonMatrix rows={rows} scope={scope} />
+        </InsightCard>
+
+        <InsightCard
+          className="min-h-0 lg:col-span-4"
+          eyebrow="Lowest days of cover, medicine by district"
+          title={heatTitle(mdata)}
+          section="Districts / Medicines"
+          source="Source: insights/medicine-matrix, days of cover = units / average daily use"
+          bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <div ref={heatBodyRef} className="min-h-0 flex-1 overflow-hidden">
+            <HeatmapMatrix
+              rows={sortedMeds.map((m) => ({ id: m.name, label: shortMedicine(m.name), group: m.emergency ? "Emergency medicines" : "Essential medicines" }))}
+              cols={mdata.districts.map((d) => ({ id: d.id, label: shortName(d.name) }))}
+              value={(rid, cid) => mdata.cells.find((c) => c.medicine_name === rid && c.district_id === cid)?.min_days_remaining ?? null}
+              scale={COVER_SCALE}
+              format={(v) => `${v}d`}
+              cellSize={heatCell}
+            />
+          </div>
+          {worstCell && worstDistrict && (
+            <div className="mt-1.5 shrink-0">
+              <Callout tone="critical">
+                {shortMedicine(worstCell.medicine_name)} in {shortName(worstDistrict.name)}: {worstCell.min_days_remaining}d, {worstCell.facilities_below_threshold} below threshold
+              </Callout>
+            </div>
           )}
-          {tab === "footfall" && (
-            <>
-              <MultiLineForecast
-                data={footRows}
-                xKey="day"
-                forecastFrom={forecastFrom}
-                series={rows.map((r, i) => ({ key: r.district_id, name: shortName(r.name), color: seriesColor(i) }))}
-                unit="visits"
-                height={chartHeight}
-              />
-              {peaks[0] && <div className="mt-2"><Callout>{peaks[0].name} peaks on {peaks[0].day} at {peaks[0].value} visits</Callout></div>}
-            </>
+        </InsightCard>
+
+        <InsightCard
+          className="min-h-0 lg:col-span-3"
+          eyebrow="Footfall forecast"
+          title={footfallTitle(peaks[0] ?? null)}
+          section="Districts / Footfall"
+          source="Source: footfall/forecast, five districts"
+          bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <div ref={forecastBodyRef} className="min-h-0 flex-1 overflow-hidden">
+            <MultiLineForecast
+              data={footRows}
+              xKey="day"
+              forecastFrom={forecastFrom}
+              series={rows.map((r, i) => ({ key: r.district_id, name: shortName(r.name), color: seriesColor(i) }))}
+              unit="visits"
+              height={chartHeight}
+            />
+          </div>
+          {peaks[0] && (
+            <div className="mt-1.5 shrink-0">
+              <Callout>{peaks[0].name} peaks {peaks[0].day} at {peaks[0].value}</Callout>
+            </div>
           )}
-        </div>
-      </InsightCard>
+        </InsightCard>
+      </div>
     </div>
   );
 }
