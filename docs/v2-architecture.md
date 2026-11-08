@@ -189,9 +189,9 @@ Code lives in `backend/app/voice/`, `backend/app/tools/` and `backend/app/api/v1
 | `voice_ws.py` | The `/ws/voice` endpoint, origin check, frame dispatch |
 | `session.py` | `VoiceSession`: one per socket, owns history, STT, TTS and `run_turn` |
 | `turns.py` | `TurnController`: at most one active turn, coalescing, barge-in |
-| `sarvam_stt.py` | Realtime STT WebSocket client |
-| `sarvam_chat.py` | Non-streaming and streaming chat completions |
-| `sarvam_tts_ws.py`, `sarvam_tts.py` | Streaming TTS over WebSocket, REST fallback |
+| `gnani_stt.py` | Realtime STT WebSocket client (Gnani Prisma) |
+| `../llm/client.py`, `../llm/router.py` | OpenAI-compatible chat client and the Evon-v3.3-first, Gemini-fallback router |
+| `gnani_tts.py`, `wav.py` | Streaming TTS over WebSocket (Gnani Timbre), REST fallback, WAV parsing |
 | `segmenter.py` | `SentenceSegmenter` |
 | `speech.py` | `prepare_speech`, language detection |
 | `fillers.py` | Cached filler audio |
@@ -202,7 +202,7 @@ Code lives in `backend/app/voice/`, `backend/app/tools/` and `backend/app/api/v1
 `TurnController` owns at most one active turn. Every new user utterance cancels the old one.
 
 - **Coalescing.** STT finals arriving within 350 ms of each other form one user turn, because people pause mid-question. Typed text bypasses coalescing.
-- **Barge-in.** On STT `vad` speech start while a turn is thinking or speaking, barge-in is armed. It is confirmed only when a partial transcript with at least 2 words follows, and never within 400 ms of the current turn's first audio, so the assistant's own voice leaking into the microphone does not interrupt itself. A finished turn still counts as speaking until its queued audio would have finished playing, so barge-in works while the browser plays the tail of a turn the server has completed. On confirmation the controller cancels the turn, calls back into the session (which sends `interrupted`, drops TTS and adds a history note) and lets the browser stop playback.
+- **Barge-in.** On STT `vad` speech start while a turn is thinking or speaking, barge-in is armed. **2026-11 (Gnani migration):** Gnani Prisma sends no partial transcripts, only a final one per utterance, so confirmation now happens on that final transcript: it is confirmed when the final transcript has at least 2 words, and never within 400 ms of the current turn's first audio, so the assistant's own voice leaking into the microphone does not interrupt itself. (The pre-migration Sarvam implementation confirmed on a partial transcript instead; the 2-word and 400 ms rules are unchanged.) A finished turn still counts as speaking until its queued audio would have finished playing, so barge-in works while the browser plays the tail of a turn the server has completed. On confirmation the controller cancels the turn, calls back into the session (which sends `interrupted`, drops TTS and adds a history note) and lets the browser stop playback.
 - **Stop button.** The client `interrupt` frame cancels immediately, without the word check.
 - **Cancellation safety.** Resource cleanup happens in `finally` blocks and `CancelledError` is re-raised. The user message is appended to history at turn start. The assistant message is appended only if the turn completes. An interrupted answer is discarded and a system note "(The previous answer was interrupted by the officer.)" is added so the model does not repeat itself.
 - **Serialization.** History is mutated only on the event loop. Tools run in threads and return values.
@@ -212,7 +212,7 @@ Code lives in `backend/app/voice/`, `backend/app/tools/` and `backend/app/api/v1
 `VoiceSession.run_turn`:
 
 1. Send `thinking` with stage `planning`. Arm the filler timer.
-2. **Planning call.** With `SARVAM_STREAM_WITH_TOOLS=true` (the default) it is a streaming call with tools, parsing both `delta.content` and `delta.tool_calls` (tool call deltas carry an index, an id on the first delta and argument fragments to concatenate). If content streams first, that is the answer. With the flag off it is a non-streaming call with tools.
+2. **Planning call.** With `LLM_STREAM_WITH_TOOLS=true` (the default) it is a streaming call with tools, through `LlmRouter.stream_chat` (Evon v3.3 when `EVON_BASE_URL` is set, else Gemini), parsing both `delta.content` and `delta.tool_calls` (tool call deltas carry an index, an id on the first delta and argument fragments to concatenate; a Gemini 3 "thought signature" under `extra_content` is preserved and sent back on the follow-up call). If content streams first, that is the answer. With the flag off it is a non-streaming call with tools.
 3. **Tool rounds**, at most 3 (`MAX_TOOL_ROUNDS`). For each round: send `thinking` with stage `tools` and a label such as "Checking Kota district data", run all of the round's tool calls concurrently in threads, send one `tool` frame per call, then append the assistant message with its `tool_calls` and one `tool` message per call id. Tool results go to the model as `json.dumps(result.llm, default=str)`; `default=str` guards against Firestore timestamp objects. A round that returns content and no tool calls yields the final answer.
 4. **Answer call** after tools: streaming, `tool_choice: "none"`, the same tools list (so the prompt stays identical), `max_tokens: 320`, `temperature: 0.3`, `reasoning_effort: null`.
 5. **Segment and speak.** Content goes through `SentenceSegmenter`. For each sentence: `prepare_speech`, a `reply_delta` frame, then the TTS stream. The filler is played once, only while a tool round is running, if no answer audio has started 1.0 s (`FILLER_DELAY_S`) after the end of speech. It is cancelled by the first real answer audio, not by the tools finishing, because the follow-up chat call is itself a network round trip.
@@ -224,8 +224,8 @@ Timeouts: planning and answer calls 15 s each, TTS 10 s. One retry on HTTP 429 o
 Adapters worth knowing:
 
 - **SentenceSegmenter** emits a sentence at `. ! ? ।` followed by whitespace or end of stream, except decimals like "2.5" and abbreviations (`Dr.`, `No.`, `vs.`, `e.g.`, `i.e.`). A buffer over 180 characters with no terminator is cut at the last comma or space. `flush()` returns the remainder.
-- **Streaming TTS** connects once per session to `wss://api.sarvam.ai/text-to-speech/ws` (model `bulbul:v3`, `linear16` output at 24 kHz), sends a config, then one message per sentence and a flush at turn end, and waits for the final event. It reopens when the turn language changes or after a barge-in. If the socket fails mid-turn, the remaining sentences use REST synthesis (WAV) and the session stays on REST for 5 minutes. The socket config uses `target_language_code`, as verified by the probe.
-- **STT** uses the realtime endpoint (`saaras:v3-realtime`, fast stream, VAD endpointing with 500 ms of silence). It forwards VAD events as `vad` frames and to the turn controller. On reconnect it buffers at most 1 second of audio and makes up to three attempts.
+- **Streaming TTS** (**2026-11, Gnani Timbre v2.5**) connects to `wss://api.vachana.ai/api/v1/tts` (model `timbre-v2.5`, raw `linear_pcm` output at 24 kHz). Gnani allows only one active synthesis request per key, so the stream sends one sentence, waits for its `complete` event, then sends the next, rather than configuring the socket once and streaming sentences freely the way Sarvam did. If the socket fails mid-turn, the remaining sentences use REST synthesis (raw WAV bytes, not JSON) and the session stays on REST for 5 minutes.
+- **STT** (**2026-11, Gnani Prisma v2.5**) uses `wss://api.vachana.ai/stt/v3/stream`, with every session parameter (language, model, format, VAD tuning) sent as a handshake header rather than a query string, and binary frames of exactly 1024 bytes (not JSON-wrapped base64 audio). It sends no partial transcripts: `processing` (VAD end) and one `transcript` (final) per utterance. It forwards `speech_start`/`processing` as `vad` frames and the final transcript to the turn controller (see the barge-in note in 2.1). On reconnect it buffers about 1 second of frames and makes up to three attempts.
 - **`prepare_speech`** replaces leaked ids (for example `kota_phc_4`) with facility names, strips markdown symbols and bracketed content, and collapses whitespace. It does not transliterate.
 - **Language.** From `hello.language` unless `auto`. Otherwise from the STT final's language (English gives `en-IN`, anything else `hi-IN`). For typed text, `hi-IN` if the text has Devanagari or at least two common Hinglish words, else `en-IN`.
 
@@ -257,7 +257,7 @@ Server to client:
 
 | Frame | Fields |
 |---|---|
-| `ready` | `sessionId`, `sttMode` (`ws` for realtime, `rest` when typed only), `ttsMode` (`ws` or `rest`), `protocol: 2`, `speaker` |
+| `ready` | `sessionId`, `sttMode` (`ws` for realtime, `rest` when typed only), `ttsMode` (`ws` or `rest`), `protocol: 2`, `speaker`, `stack` (`{stt, tts, llm}` labels, added 2026-11) |
 | `vad` | `state` (`start` or `end`) |
 | `partial` | `text` |
 | `final` | `text`, `turnId`, `language`, `clientTurnId?` |
@@ -267,11 +267,11 @@ Server to client:
 | `reply` | `turnId`, `text`, `toolCalls`, `cards`, `language` |
 | `audio` | `turnId`, `seq`, `b64`, `encoding` (`pcm_s16le` or `wav`), `sampleRateHz`, `filler` |
 | `interrupted` | `turnId` |
-| `turn_end` | `turnId`, `metrics` (`finalToFirstTokenMs`, `finalToFirstAudioMs`, `finalToFirstAnswerAudioMs`, `totalMs`, `tools`) |
+| `turn_end` | `turnId`, `metrics` (`finalToFirstTokenMs`, `finalToFirstAudioMs`, `finalToFirstAnswerAudioMs`, `totalMs`, `tools`, `llm` — the provider label that actually answered this turn, added 2026-11) |
 | `error` | `message`, `fatal`, `code` |
 
 Client behaviour worth knowing: the browser stops playback when it receives `interrupted` and drops late audio for that turn. The Stop button stops local playback first and then sends `interrupt`. The session starts only from a user click, because a suspended `AudioContext` cannot play. The socket URL must use `127.0.0.1` on Windows, and the server origin check accepts both `localhost` and `127.0.0.1` on ports matching `CORS_ORIGIN_REGEX` outside production.
 
 ### 2.5 Evaluation
 
-`backend/evals/voice_cases.yaml` holds 40 cases (state overview, district drill-down, facility with fuzzy spoken names, shortages, recommendations, logistics, general knowledge, guardrails, with a share in Hindi or Hinglish). `voice_eval.py` drives a real `VoiceSession` in process with TTS off, a fake sender and real Sarvam chat. It re-calls the tool the model chose, with the model's own arguments, to get live ground truth, and checks tool choice, entity resolution and grounding. `voice_latency_probe.py` opens the real WebSocket, asks a typed question 5 times with TTS on, and reports medians. Both call the paid Sarvam API, so budget their use. Results are summarised in `docs/v2-reports/final-audit.md`.
+`backend/evals/voice_cases.yaml` holds 40 cases (state overview, district drill-down, facility with fuzzy spoken names, shortages, recommendations, logistics, general knowledge, guardrails, with a share in Hindi or Hinglish). `voice_eval.py` drives a real `VoiceSession` in process with TTS off, a fake sender and a real LLM chat call through the router (Evon v3.3 when configured, else Gemini). It re-calls the tool the model chose, with the model's own arguments, to get live ground truth, and checks tool choice, entity resolution and grounding. `voice_latency_probe.py` opens the real WebSocket, asks a typed question 5 times with TTS on, and reports medians. Both call live, possibly paid, APIs, so budget their use. Results from the pre-migration Sarvam build are summarised in `docs/v2-reports/final-audit.md`; a fresh run against Gnani/Evon-Gemini has not been made (see the README's Known limitations).
