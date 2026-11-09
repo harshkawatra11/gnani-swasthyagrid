@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { KpiTile } from "@/components/ds/KpiTile";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { RiskChip } from "@/components/ds/RiskChip";
-import { useAlerts, useBeds, useDiagnostics, useDoctors, useMedicines, usePerformance } from "@/lib/api/hooks";
+import { useAlerts, useBeds, useDiagnostics, useDoctors, useImpactModel, useMedicines, usePerformance } from "@/lib/api/hooks";
 import { useLiveEvents } from "@/lib/live/LiveProvider";
 import { useEntityIndex } from "@/lib/entity-index";
 import { useScope } from "@/lib/scope";
@@ -26,6 +27,10 @@ import { diagState, enrichMedicines, mean, shortDistrict, shortMedicine } from "
 
 const SOURCE = "Source: SwasthyaGrid performance scores, seed data. Scores 0 to 100, higher is better";
 
+function crore(days: number): string {
+  return `${(days / 1e7).toFixed(2)} crore`;
+}
+
 export default function AnalyticsPage() {
   const { scope } = useScope();
   const perfQ = usePerformance(scope);
@@ -34,6 +39,7 @@ export default function AnalyticsPage() {
   const docQ = useDoctors(scope);
   const diagQ = useDiagnostics(scope);
   const alertQ = useAlerts(scope);
+  const impactQ = useImpactModel();
   const { refs } = useFacRefs(scope);
   const index = useEntityIndex();
   const live = useLiveEvents();
@@ -226,6 +232,39 @@ export default function AnalyticsPage() {
       >
         <ScorecardTable rows={perf} risk={risk} onSelect={setPick} />
       </InsightCard>
+
+      {impactQ.data && (
+        <InsightCard
+          eyebrow="National impact model"
+          title={`Halving stock-outs nationally would avoid ${crore(impactQ.data.scenarios.base.days_avoided)} stock-out days a year`}
+          source="Model: 38,241 PHCs and CHCs (MoHFW HDI 2022-23) x 7 tracer medicines x 365 days x (1 - 72.2% availability, PMC8654139). Bull case uses eVIN's 80% (UNDP). An estimate, not a measured outcome."
+          section="Analytics / Impact model"
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <KpiTile
+              label="Baseline stock-out days / year"
+              value={crore(impactQ.data.baseline_stock_out_days)}
+              hint={`${impactQ.data.facilities.toLocaleString("en-IN")} facilities x ${impactQ.data.tracer_medicines} tracer medicines`}
+            />
+            <KpiTile
+              label="Bear case, 30% cut"
+              value={crore(impactQ.data.scenarios.bear.days_avoided)}
+              hint={`availability rises to ${(impactQ.data.scenarios.bear.availability_after * 100).toFixed(1)}%`}
+            />
+            <KpiTile
+              label="Base case, 50% cut"
+              value={crore(impactQ.data.scenarios.base.days_avoided)}
+              tone="good"
+              hint={`availability rises to ${(impactQ.data.scenarios.base.availability_after * 100).toFixed(1)}%`}
+            />
+            <KpiTile
+              label="Bull case, 80% cut"
+              value={crore(impactQ.data.scenarios.bull.days_avoided)}
+              hint={`availability rises to ${(impactQ.data.scenarios.bull.availability_after * 100).toFixed(1)}%, eVIN's reported result`}
+            />
+          </div>
+        </InsightCard>
+      )}
 
       <div className="grid gap-3 xl:grid-cols-12">
         <InsightCard className="xl:col-span-4" eyebrow="Forecast confidence" title={`${share80}% of forecasts carry at least 80% model confidence`} source="Source: confidence field of medicine and bed forecasts" section="Analytics / Confidence">

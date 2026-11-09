@@ -5,8 +5,8 @@
 *Forecast the stock-out before it happens, propose the fix, watch the truck move, close the loop when the delivery is confirmed.*
 
 [![Live App](https://img.shields.io/badge/Live_App-gnani--swasthyagrid.vercel.app-2dd4a7?style=for-the-badge&logo=vercel&logoColor=white)](https://gnani-swasthyagrid.vercel.app)
-[![Backend](https://img.shields.io/badge/Backend-Cloud_Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://gnani-swasthyagrid-api-run.app/health)
-[![Backend tests](https://img.shields.io/badge/backend_tests-384_passing-19b98c?style=for-the-badge&logo=pytest&logoColor=white)](#testing-and-evaluation)
+[![Backend](https://img.shields.io/badge/Backend-Cloud_Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://gnani-swasthyagrid-api-1007546129237.asia-south1.run.app/health)
+[![Backend tests](https://img.shields.io/badge/backend_tests-386_passing-19b98c?style=for-the-badge&logo=pytest&logoColor=white)](#testing-and-evaluation)
 [![Frontend tests](https://img.shields.io/badge/frontend_tests-271_passing-19b98c?style=for-the-badge&logo=vitest&logoColor=white)](#testing-and-evaluation)
 [![License](https://img.shields.io/badge/license-Apache_2.0-93691f?style=for-the-badge)](LICENSE)
 
@@ -21,16 +21,18 @@
 
 [The problem](#the-problem) &middot;
 [The loop](#the-loop-not-five-screens) &middot;
-[Built on Gnani.ai](#built-on-gnaniai) &middot;
+[Voice stack](#voice-and-language-stack) &middot;
 [The stack](#a-map-of-the-stack) &middot;
 [Architecture](#architecture) &middot;
 [The loop, end to end](#the-loop-end-to-end) &middot;
 [Voice agent](#voice-agent-deep-dive) &middot;
 [Supply chain](#supply-chain-module-deep-dive) &middot;
 [Recommendation engine](#recommendation-engine-deep-dive) &middot;
+[Impact model](#impact-model) &middot;
 [Deployed environments](#deployed-environments) &middot;
 [Run it](#running-it-locally) &middot;
-[Testing](#testing-and-evaluation)
+[Testing](#testing-and-evaluation) &middot;
+[Code for a Billion](#code-for-a-billion)
 
 </div>
 
@@ -38,9 +40,26 @@
 
 ## The problem
 
-Across India's public healthcare system, more than 25,000 Primary Health Centres (PHCs) and 5,600 Community Health Centres (CHCs) provide frontline care. Operational data from these facilities often lives in paper registers, spreadsheets and monthly summaries. When a rural PHC runs out of Anti-Snake Venom, Anti-Rabies Vaccine, Oxytocin or Adrenaline, the district office can learn about it days after the stock reached zero, while a sibling facility a short drive away holds a surplus of the same item.
+Across India's public healthcare system, 38,241 Primary Health Centres and Community Health Centres (31,882 PHCs and 6,359 CHCs, MoHFW *Health Dynamics of India* 2022-23) provide frontline care. Operational data from these facilities often lives in paper registers, spreadsheets and monthly summaries. When a rural PHC runs out of Anti-Snake Venom, Anti-Rabies Vaccine, Oxytocin or Adrenaline, the district office can learn about it days after the stock reached zero, while a sibling facility a short drive away holds a surplus of the same item.
 
 Health management information systems mostly record what went wrong last month. They do not forecast tomorrow's depletion or work out where stock should move. SwasthyaGrid computes stock burn rates and bed saturation ahead of time, proposes inter-facility and warehouse-to-facility movements with a confidence score and stated reasons, and requires a human approval before anything is dispatched.
+
+## The problem, in numbers
+
+**Scale.** Key-medicine availability in public facilities ranges from 45% to 80% across state studies: 45.2% in Punjab (80 facilities), 51.1% in Haryana, 72.2% in Puducherry's state PHCs, 74.2% in Gadag, Karnataka, and 77% in Puducherry's central PHCs (PMC8654139, PMC10292169, Kotwani 2015). 60% of Haryana's medicine gaps last 3 to 6 months, not days.
+
+**Severity: who is hurt when the shelf is empty.**
+
+| Condition | Medicine a PHC must hold | Burden in India |
+|---|---|---|
+| Snakebite | Anti-snake venom | 58,000 deaths a year (eLife 2020) |
+| Rabies | Anti-rabies vaccine | 5,726 deaths a year (WHO) |
+| Childbirth | Oxytocin | MMR 93 per 1,00,000 births (SRS 2019-21) |
+| Dengue | IV fluids | outbreak signal 4 to 6 weeks before the peak (IDSP study) |
+
+**Economic loss, on both sides of the same shelf.** Families pay: 43.4% of India's health spending is out of pocket (NHA 2022-23, down from 64.2% in 2013-14), and in Odisha over 70% of people buy medicines privately when the public facility has none. The state loses stock it already paid for: CAG audits found ₹390.26 Cr of medicine expired in Telangana's stores and ₹168 Cr in Odisha's, about ₹1.97 Cr and ₹0.96 Cr per district per year; Telangana also issued ₹17.13 Cr of drugs with 1 to 89 days of shelf life left. More staff cannot close the gap either: 79.9% of CHC specialist posts are unfilled (MoHFW HDI 2022-23).
+
+The medicine is often already inside the district. Nobody adds up facility stock district-wide each morning, because it is nobody's job. SwasthyaGrid makes it one officer's five-minute job; see [Impact model](#impact-model) for what that is worth at national scale.
 
 ## The loop, not five screens
 
@@ -55,9 +74,9 @@ A district officer's real question is never "show me a dashboard." It is one con
 
 At the default 60x simulated clock, that whole loop, from approving a recommendation to watching the receiving facility's risk chip turn from Critical to Healthy, fits in about four minutes. See [The loop, end to end](#the-loop-end-to-end) for the exact sequence and the [Demo script](#demo-script-about-four-minutes) to drive it yourself.
 
-## Built on Gnani.ai
+## Voice and language stack
 
-### Why Gnani
+### Why this stack
 
 A district officer asks questions half in Hindi and half in English in the same sentence ("Kota mein kitne PHC critical hain?"). Gnani is built Indic-first rather than Indic-adapted: Evon trains on Indic-majority data from the start instead of fine-tuning an English-first model, and Prisma and Timbre are tuned for Indian speech, including 8 kHz telephony audio, not just studio-quality English. One vendor, Gnani.ai, now covers every stage of the voice pipeline: what the officer says, what the model understands, and what they hear back.
 
@@ -174,7 +193,7 @@ Evon v3.3 needs an 80 GB-class GPU (H100, H200 or A100) to serve; no free server
 | Voice speech-to-text | Gnani Prisma v2.5 | `GNANI_STT_MODEL=prisma-v3.0` for automatic language detection |
 | Voice text-to-speech | Gnani Timbre v2.5 | `GNANI_TTS_MODEL=timbre-v3.0` plus a Timbre v3 voice name |
 | Voice LLM and the AI briefing | **Evon v3.3 when `EVON_BASE_URL` is set, else Gemini** | Set `EVON_BASE_URL` to any OpenAI-compatible endpoint serving Evon |
-| Typed Ask endpoint | Gemini (`google-genai`, automatic function calling) | unchanged from the pre-Gnani build |
+| Typed Ask endpoint | Gemini (`google-genai`, automatic function calling) | Gemini only |
 
 ### Run Evon v3.3 yourself
 
@@ -227,7 +246,7 @@ cd backend
 python scripts/probe_gnani.py --llm
 ```
 
-### Gnani resources
+### Voice stack references
 
 - [gnani.ai/models](https://www.gnani.ai/models) — the model catalogue (Evon, Prisma, Timbre, Warp, Aion).
 - [docs.gnani.ai](https://docs.gnani.ai) — the Vachana API reference (STT, TTS, voice cloning, batch jobs).
@@ -325,7 +344,7 @@ Every card is tied to a real file in this repository.
 | Google Cloud Run, Artifact Registry, Secret Manager | Backend hosting, Always Free tier, scale to zero | `backend/scripts/deploy.sh` |
 | GitHub Actions | Lint, typecheck, test and build gate on every push and pull request | `.github/workflows/ci-cd.yml` |
 | Playwright | End-to-end specs and the fit-at-1920x1080 screenshot tooling | `frontend/e2e/`, `frontend/scripts/fit-check.mjs` |
-| Vitest, Pytest, Ruff | 271 frontend unit tests, 384 backend tests, backend lint | `frontend/src/**/*.test.ts*`, `backend/tests/` |
+| Vitest, Pytest, Ruff | 271 frontend unit tests, 386 backend tests, backend lint | `frontend/src/**/*.test.ts*`, `backend/tests/` |
 
 ## What is in this repository
 
@@ -338,6 +357,8 @@ Every card is tied to a real file in this repository.
 The CRM is a separate git repository (`SwasthyaGrid-CRM`, branch `feat/deliveries`) and is not part of this repository. Clone it next to the backend and dashboard checkout if you want to run the full delivery loop. Everything else in this README works without it.
 
 ## Architecture
+
+Everything below describes the single live deployment. For how multiple independent state or country deployments would relate to each other without sharing facility-level data, see [`docs/federation.md`](docs/federation.md).
 
 ```mermaid
 flowchart LR
@@ -444,16 +465,18 @@ The sidebar groups pages as follows. All pages are scope-aware: a global distric
 | Supply Chain | Shipment Tracking | `/supply/shipments/[shipmentId]` | ETA countdown, status stepper, driver card, cold-chain temperature, route on map |
 | Supply Chain | Fleet | `/supply/fleet` | Vehicles with live status and cargo pallet view. May scroll, but only down to the end of the Driver cam. |
 | Supply Chain | Drivers | `/supply/drivers` | Roster, live status, driver panel |
-| Supply Chain | Load Planning | `/supply/planning` | Queue, capacity view, Gantt-style trip chart |
 | Operations | Inventory | `/inventory` | Stock and days of cover by facility and medicine, with a facility-by-medicine heatmap |
-| Operations | Footfall | `/footfall` | Seven day patient volume forecast |
+| Operations | Footfall | `/footfall` | **One screen, no page scroll.** Seven-day fan chart, tomorrow's breakdown, district calendar, five district multiples |
+| Operations | Bed Occupancy | `/beds` | **One screen, no page scroll.** Occupancy strip (paged, worst first), capacity waterfall, district bars, pressure list, redirect recommendations |
+| Operations | Doctors | `/doctors` | **One screen, no page scroll.** Attendance heat calendar (paged), absence ranking, patient delay |
+| Operations | Diagnostics | `/diagnostics` | **One screen, no page scroll.** Availability matrix for all five districts, nearest-alternative list |
 | Insights | Analyst Workbench | `/analytics` | Cross-cutting charts and scenario views |
 
-Facilities, Geo Intelligence, Warehouses, Beds, Doctors and Diagnostics were removed as standalone tabs to keep the sidebar to the eleven pages above; the six old routes (`/facilities`, `/map`, `/supply/warehouses`, `/beds`, `/doctors`, `/diagnostics`) redirect to the page that now carries the same information. The Facility Profile drill-down stays, since about 25 links across the app (and the voice agent's fact cards) point at it.
+Facilities, Geo Intelligence, Warehouses and Load Planning are no longer sidebar tabs; their routes (`/facilities`, `/map`, `/supply/warehouses`, `/supply/planning`) redirect to the page that now carries the same information. The Facility Profile drill-down stays, since about 25 links across the app (and the voice agent's fact cards) point at it.
 
 `/supply/shipments` (the old list page) redirects to `/supply`, which folds the shipment list into the Dispatch page's Orders panel. There is a design-system reference page at `/ds` (theme tokens and components, not in the sidebar), a light theme by default with a dark theme toggle, a command palette (`Ctrl K`), and a topbar sim clock chip (1x, 10x, 60x, 120x and reset).
 
-A quick gallery from the earlier SwasthyaGrid build (captured live off `swasthyagrid.vercel.app` running against its Cloud Run backend), kept as a reference since it predates the Gnani migration and the one-screen redesign described above:
+A gallery captured live off the production app:
 
 <table>
 <tr>
@@ -463,6 +486,22 @@ A quick gallery from the earlier SwasthyaGrid build (captured live off `swasthya
 <tr>
 <td width="50%"><img src="docs/v2-shots/readme/supply.png" alt="Dispatch"><br/><sub>Dispatch: live truck positions, orders list, volume and status charts.</sub></td>
 <td width="50%"><img src="docs/v2-shots/readme/recommendations.png" alt="Recommendations"><br/><sub>Recommendations: the decision board, funnel and district approval mix.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/v2-shots/readme/districts.png" alt="District Comparison"><br/><sub>District Comparison: one screen, five districts, comparison matrix and medicine-cover heatmap at once.</sub></td>
+<td width="50%"><img src="docs/v2-shots/readme/inventory.png" alt="Inventory"><br/><sub>Inventory: stock and days of cover by facility and medicine.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/v2-shots/readme/footfall.png" alt="Footfall"><br/><sub>Footfall: one screen, fan chart, tomorrow's breakdown and district calendar.</sub></td>
+<td width="50%"><img src="docs/v2-shots/readme/beds.png" alt="Bed Occupancy"><br/><sub>Bed Occupancy: one screen, occupancy strip, capacity waterfall, district bars.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/v2-shots/readme/doctors.png" alt="Doctors"><br/><sub>Doctors: one screen, attendance heat calendar, absence ranking, patient delay.</sub></td>
+<td width="50%"><img src="docs/v2-shots/readme/diagnostics.png" alt="Diagnostics"><br/><sub>Diagnostics: one screen, availability matrix for all five districts.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/v2-shots/readme/fleet.png" alt="Fleet"><br/><sub>Fleet: vehicles with live status and cargo pallet view.</sub></td>
+<td width="50%"><img src="docs/v2-shots/readme/analytics.png" alt="Analyst Workbench"><br/><sub>Analyst Workbench: cross-cutting charts and scenario views.</sub></td>
 </tr>
 </table>
 
@@ -573,9 +612,9 @@ flowchart LR
   V -->|NEXT_PUBLIC_API_BASE| CR
 ```
 
-**Frontend.** Live at [gnani-swasthyagrid.vercel.app](https://gnani-swasthyagrid.vercel.app). The Vercel project is Git-connected to the `harshkawatra11/gnani-swasthyagrid` repository's `main` branch; every push builds and promotes to production automatically, with `NEXT_PUBLIC_API_BASE` and `NEXT_PUBLIC_VOICE_WS_URL` set as encrypted project environment variables pointing at the Cloud Run backend below.
+**Frontend.** Live at [gnani-swasthyagrid.vercel.app](https://gnani-swasthyagrid.vercel.app). The Vercel project is Git-connected to the `harshkawatra11/swasthyagrid` repository's `main` branch; every push builds and promotes to production automatically, with `NEXT_PUBLIC_API_BASE` and `NEXT_PUBLIC_VOICE_WS_URL` set as encrypted project environment variables pointing at the Cloud Run backend below.
 
-**Backend.** Deployed to Google Cloud Run in `asia-south1` (Mumbai, chosen over the free-tier regions because it sits next to Gnani's API and this project's users), on a new Google Cloud project billed to the same account as the earlier SwasthyaGrid build. Deploy it yourself with:
+**Backend.** Deployed to Google Cloud Run in `asia-south1` (Mumbai, chosen over the free-tier regions because it sits next to Gnani's API and this project's users), on its own Google Cloud project. Deploy it yourself with:
 
 ```bash
 cd backend
@@ -742,7 +781,7 @@ Step 9 needs a CRM login for the receiving facility. See [Known limitations](#kn
 
 ## Testing and evaluation
 
-Current counts at the time of writing: 384 backend tests and 271 frontend tests (both pass; backend's 2 unrelated pre-existing environment failures — a `google-api-core` version mismatch and a flaky driver-roster test, both present before the Gnani migration — are tracked separately and are not part of this count).
+Current counts at the time of writing (9 Nov 2026): 386 backend tests and 271 frontend tests, both fully passing with `DATA_SOURCE=seed`.
 
 ```bash
 # backend (from backend/, venv active)
@@ -773,7 +812,7 @@ python -m evals.voice_latency_probe          # opens the real WebSocket, 5 typed
 | Live contract probe (Nov 2026) | All Gnani TTS/STT paths and the Gemini LLM path confirmed live; see [`docs/probes/2026-11-gnani.md`](docs/probes/2026-11-gnani.md) for exact latencies and the one-active-request concurrency finding |
 | Endpoint sweep, 34 GET routes | all under 250 ms at p95 on a freshly reset scenario |
 
-The 40-case bilingual accuracy run and the 5-turn latency probe were last measured against the pre-migration Sarvam stack (37/40 passed, 836 ms median time to first audio with no tools, 1.25 s with one tool round); re-running them against Gnani/Evon-Gemini is pending and is not claimed here, so as not to present a stale number as current. Run the two commands above yourself to get a current reading for your own `EVON_BASE_URL`/`GEMINI_API_KEY` configuration.
+The 40-case bilingual accuracy run and the 5-turn latency probe were last measured against an earlier Sarvam-based voice stack (37/40 passed, 836 ms median time to first audio with no tools, 1.25 s with one tool round); re-running them against Gnani/Evon-Gemini is pending and is not claimed here, so as not to present a stale number as current. Run the two commands above yourself to get a current reading for your own `EVON_BASE_URL`/`GEMINI_API_KEY` configuration.
 
 Endpoint sweep, which times every GET endpoint against a running backend and exits non-zero if one fails or is slow:
 
@@ -797,6 +836,24 @@ Unit and integration tests never call Gnani or an LLM provider. Live calls happe
 
 Language models never change state. The voice agent is read-only by design.
 
+## Impact model
+
+The prototype's own numbers describe 40 facilities on simulated data. To estimate what the same approach would be worth nationally, a separate, deterministic impact model (no inputs, no network, independently rerunnable; [`backend/app/impact/model.py`](backend/app/impact/model.py), served live at `GET /api/v1/impact` and shown on the [Analyst Workbench](#feature-tour)) projects it across every PHC and CHC in India:
+
+```
+baseline stock-out days / year = facilities × tracer medicines × 365 × (1 − availability)
+```
+
+with 38,241 facilities (31,882 PHCs + 6,359 CHCs, MoHFW HDI 2022-23), 7 tracer medicines (the prototype's own catalogue), and a baseline availability of 72.2% (PMC8654139), giving a baseline of **2.72 crore stock-out facility-medicine-days a year**.
+
+| Scenario | Cut in stock-out days | Days avoided a year | Availability after |
+|---|---|---|---|
+| Bear | 30% | 0.81 crore | 80.5% |
+| Base | 50% | **1.36 crore** | **86.1%** |
+| Bull (eVIN's reported result) | 80% | 2.17 crore | 94.4% |
+
+The bull case uses eVIN's own reported 80% reduction in vaccine stock-outs (UNDP) as a ceiling, not a prediction. Every cell of the model's availability-by-cut sensitivity grid clears 58.6 lakh days avoided a year. This is an estimate from a stated model, not a measured outcome; the model's full derivation, source register and sensitivity analysis are in the research write-up linked under [Code for a Billion](#code-for-a-billion) below.
+
 ## System health heatmap
 
 A module-by-module status, cross-checked against [Known limitations](#known-limitations) rather than aspirational: 🟢 solid, 🟡 partial, 🔴 known gap.
@@ -815,10 +872,10 @@ A module-by-module status, cross-checked against [Known limitations](#known-limi
 - **All logistics data is simulated.** Fleet, drivers, warehouses, shipment history, on-time rates and incidents are generated. Facility stock, beds, doctors and diagnostics are also generated seed data. None of it is a real statistic.
 - **Firestore is not seeded with the 40 facilities.** The upsert of the 40-facility dataset into Firestore and the creation of 40 facility logins in the CRM were not applied, because both write to a live database and need explicit approval. The backend therefore runs with `DATA_SOURCE=seed`. In that mode the backend applies delivered stock itself (a stock overlay) and returns `stock_applied_by: "backend_overlay"`. The CRM only has its earlier logins (for example `phc-rural-14`, `phc-sector-12`, `chc-east` and the district admin), so a facility-specific CRM demo works today only for those facilities.
 - **The CRM loop was verified against mocks and fakes.** The CRM's own tests use a fake Firestore and a mock backend. The end-to-end loop with a real Firestore, a real service token and a browser depends on the state of your Firestore data. The CRM itself is not deployed anywhere public; it only runs locally.
-- **Voice audio was verified by frame counts, not by ear.** The automated live gate confirms that PCM audio frames arrive, are scheduled for playback, and that Stop halts playback within a millisecond or so of the click. Nobody listened to the audio as part of the Gnani migration, so voice quality, pronunciation of Hindi and Hinglish text, and echo behaviour on real speakers are untested against the new Prisma/Timbre stack. The listed Prisma/Timbre latencies and the "one active TTS request" finding, below, were confirmed live (see [`docs/probes/2026-11-gnani.md`](docs/probes/2026-11-gnani.md)). The glass orb was measured at about 144 fps in a headed browser on an integrated GPU; headless browsers use software WebGL and are far slower.
+- **Voice audio was verified by frame counts, not by ear.** The automated live gate confirms that PCM audio frames arrive, are scheduled for playback, and that Stop halts playback within a millisecond or so of the click. Nobody has listened to the audio end to end since the move to Prisma and Timbre, so voice quality, pronunciation of Hindi and Hinglish text, and echo behaviour on real speakers are untested against the new Prisma/Timbre stack. The listed Prisma/Timbre latencies and the "one active TTS request" finding, below, were confirmed live (see [`docs/probes/2026-11-gnani.md`](docs/probes/2026-11-gnani.md)). The glass orb was measured at about 144 fps in a headed browser on an integrated GPU; headless browsers use software WebGL and are far slower.
 - **Evon v3.3's tool-calling behaviour is unverified live.** No 80 GB-class GPU was available to run it during this build, so the hosted demo answers on Gemini (see [What actually runs where](#what-actually-runs-where-read-this-before-assuming-evon-answered)). The model card's own stated limitation is that "tool use and agentic capabilities are an active area of development," so the first real Evon endpoint should be run through `backend/evals/voice_eval.py` before claiming parity with Gemini's tool-calling reliability.
 - **Gnani's one-active-TTS-request limit.** Confirmed live: two simultaneous TTS REST calls on the same key returned 200 and 429. Two officers using voice at the same moment will occasionally see one assistant's reply delayed by a retry (handled automatically), not a failure.
-- **Voice evaluation results are from the pre-migration Sarvam build and are not re-claimed here.** Full details of that run are in `docs/v2-reports/final-audit.md` (37 of 40 cases passed; two of the three misses were a too-strict test assertion and one was a real ungrounded answer that led to a stricter prompt rule; 836 ms median time to first audio without tools, 1.25 s with tools). Those numbers described Sarvam, not Gnani/Evon-Gemini, and a fresh run against the current stack has not been made; run `python -m evals.voice_eval` and `python -m evals.voice_latency_probe` yourself for a current reading.
+- **Voice evaluation results are from an earlier Sarvam-based build and are not re-claimed here.** Full details of that run are in `docs/v2-reports/final-audit.md` (37 of 40 cases passed; two of the three misses were a too-strict test assertion and one was a real ungrounded answer that led to a stricter prompt rule; 836 ms median time to first audio without tools, 1.25 s with tools). Those numbers described Sarvam, not Gnani/Evon-Gemini, and a fresh run against the current stack has not been made; run `python -m evals.voice_eval` and `python -m evals.voice_latency_probe` yourself for a current reading.
 - **Performance under sustained load.** The tick loop's per-tick work (deriving status, position and events for every active shipment) can climb from single-digit milliseconds to several seconds as live and archived shipment counts grow over hours of continuous uptime; a value of `tick_ms p95 = 4.6s` was observed locally after a long session with 135 live and 2,786 archived shipments. The existing remediation (an active set, a throttled planner pass, bounded queues, an automatic scenario reset above 1,500 shipments) caps runaway growth but does not eliminate the slowdown entirely at high shipment counts. `GET /metrics` exposes `tick_ms` (last and p95) and the live/archived counts; `POST /api/v1/logistics/admin/reset` clears the backlog immediately. A page that fires many concurrent requests while this is happening, notably the Voice Control Room on first load, can hit its 6-second client timeout and show the offline banner even though the backend is reachable.
 - **No lateral transfers on the seed data.** A district warehouse van must drive to the source facility first, so a lateral transfer never beats a direct warehouse replenishment by the required 30 minutes. The lateral path exists and is tested but does not appear in the demo data.
 - **State is in one process.** Logistics state lives in memory with a JSON file behind it. Running several backend instances would give each its own world; the Cloud Run deploy is pinned to `--max-instances 1` for exactly this reason.
@@ -831,8 +888,23 @@ A module-by-module status, cross-checked against [Known limitations](#known-limi
 - [`docs/probes/2026-11-gnani.md`](docs/probes/2026-11-gnani.md): this build's live contract probe against the Vachana API and the LLM router.
 - [`docs/probes/2026-09-sarvam.md`](docs/probes/2026-09-sarvam.md): the earlier Sarvam contract probe, kept as build history.
 - `docs/v2-reports/`: per-lane build reports, including deviations from the plan.
-- `docs/v2-shots/`: screenshots of the built pages, including the light-theme gallery under `docs/v2-shots/readme/`. These predate the Gnani migration and the one-screen District Comparison/Dispatch redesign; they have not been retaken.
+- `docs/v2-shots/`: screenshots of the built pages, including the light-theme gallery under `docs/v2-shots/readme/`, retaken live off production on 9 Nov 2026.
 - `docs/00-vision.md` to `docs/10-demo-script.md`: the original v1 design documents. Parts of them describe the earlier single-district prototype.
+
+## Code for a Billion
+
+SwasthyaGrid is entered in Code for a Billion, the Bharat Agentic-AI Hackathon by Code for India, in the Health track.
+
+| The brief asks for | What exists today |
+|---|---|
+| Real-time visibility of medicine stock, beds and staff attendance | Built: Inventory, Bed Occupancy, Doctors, Diagnostics, Command Centre |
+| Demand forecasting and early stock-out warnings | Built: days-of-cover forecast, footfall forecast, critical flags |
+| Automated cross-district redistribution | Built: ranked refills and lateral transfers, with officer approval |
+| Federated, shared predictive modelling across nations | Design only so far: see [`docs/federation.md`](docs/federation.md) for what each state or country deployment would share (the model and aggregate statistics) and what it would not (any facility-level data) |
+
+The problem sizing, source register and the [impact model](#impact-model) above are written up in full at [`swasthyagrid-nexora-research.pdf`](https://github.com/harshkawatra11/ppts-case-study/blob/main/swasthyagrid-gcp/nexora/research/swasthyagrid-nexora-research.pdf), also linked from the pitch deck's cover and closing slides.
+
+**On AgentFoundry.** The event's listed IDE, AgentFoundry, is an editor built around Claude Code: opening it and trying it confirmed it gives the same models through the same agent, plus a bundled allotment of free API credits. Since this build already runs on a paid Claude subscription, those free credits added nothing, and the resulting work is identical either way; the impact model above (`backend/app/impact/model.py`, its endpoint and its Analyst Workbench card) and `docs/federation.md` were built with Claude Code directly.
 
 ## License
 

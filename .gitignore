@@ -1,3 +1,6 @@
+# Internal agent notes, not for a public repo
+memory/
+
 # Node
 node_modules/
 .next/

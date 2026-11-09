@@ -1,6 +1,6 @@
 # Page archetypes (binding for lane F, and for lane D where it applies)
 
-> **2026-11 note:** `/facilities` (the directory), `/map`, `/beds`, `/doctors`, `/diagnostics` and `/supply/warehouses` were removed as standalone pages in the Gnani.ai migration, and District Comparison and Dispatch were redesigned as one-screen, no-page-scroll layouts. The entries below for those pages are kept as build history; see the README's Feature tour for the current page list.
+> **2026-11 note:** `/facilities` (the directory), `/map`, `/supply/warehouses` and `/supply/planning` were removed as standalone pages. District Comparison, Dispatch, Beds, Doctors, Diagnostics and Footfall were redesigned as one-screen, no-page-scroll layouts. The entries below for the still-removed pages are kept as build history; see the README's Feature tour for the current page list.
 
 The failure to avoid: every tab being the same "title, KPI row, table" template with a new background. Each page below has its own layout archetype, its own hero visual, and its own mix of charts. Two pages must never share the same top-level arrangement. Read `consulting-grade.md` too.
 

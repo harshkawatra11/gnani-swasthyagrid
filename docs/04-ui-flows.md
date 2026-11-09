@@ -1,6 +1,6 @@
 # 04 — UI Flows
 
-> **2026-11 note:** `/facilities`, `/map`, `/beds`, `/doctors` and `/diagnostics` (and `/supply/warehouses`, elsewhere in this doc set) were removed as standalone pages in the Gnani.ai migration; the six old routes now redirect to the page that carries the same information, and the Facility Profile drill-down (`/facilities/[id]`) stays. See the README's Feature tour for the current 11-tab sidebar. The flows below describing those removed pages are kept as build history.
+> **2026-11 note:** `/facilities` (the directory), `/map`, `/supply/warehouses` and `/supply/planning` were removed as standalone pages; those routes now redirect to the page that carries the same information, and the Facility Profile drill-down (`/facilities/[id]`) stays. Beds, Doctors and Diagnostics were removed and later restored as one-screen, no-page-scroll pages. See the README's Feature tour for the current 13-tab sidebar. The flows below describing the still-removed pages are kept as build history.
 
 ## App Shell (routed dashboard, not a single scroll page)
 SwasthyaGrid is a real dashboard application: a persistent left **Sidebar** (nav rail, grouped Command / Operations / District) and a **Topbar** (district label, search/⌘K trigger, role switcher) wrap every routed page. `AskPanel` stays globally mounted bottom-right across all routes. Route changes animate via `PageTransition` (Framer Motion fade/slide, 180ms).

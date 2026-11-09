@@ -12,8 +12,15 @@ const pages = [
   { route: "/command", file: "command.png" },
   { route: "/voice", file: "voice.png" },
   { route: "/supply", file: "supply.png" },
+  { route: "/supply/fleet", file: "fleet.png" },
   { route: "/recommendations", file: "recommendations.png" },
   { route: "/districts", file: "districts.png" },
+  { route: "/inventory", file: "inventory.png" },
+  { route: "/footfall", file: "footfall.png" },
+  { route: "/beds", file: "beds.png" },
+  { route: "/doctors", file: "doctors.png" },
+  { route: "/diagnostics", file: "diagnostics.png" },
+  { route: "/analytics", file: "analytics.png" },
 ];
 
 const browser = await chromium.launch();

@@ -19,6 +19,7 @@ import type {
   FacilityProfile,
   FleetFilters,
   FootfallForecast,
+  ImpactModel,
   LogisticsKpis,
   MedicineForecast,
   MedicineMatrix,
@@ -120,6 +121,10 @@ export function useBriefing(scope: ScopeArg = "all") {
   return useApi<Briefing | null>(`${P}/insights/briefing${scopeQuery(scope)}`, null, {
     refreshInterval: REFRESH.analytics,
   });
+}
+
+export function useImpactModel() {
+  return useApi<ImpactModel | null>(`${P}/impact`, null);
 }
 
 /* ---------- district data ---------- */

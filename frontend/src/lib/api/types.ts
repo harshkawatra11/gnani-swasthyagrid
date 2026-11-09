@@ -584,3 +584,19 @@ export interface FleetFilters {
   district_id?: string;
   status?: string;
 }
+
+export interface ImpactScenario {
+  cut_pct: number;
+  days_avoided: number;
+  availability_after: number;
+}
+
+export interface ImpactModel {
+  facilities: number;
+  phc: number;
+  chc: number;
+  tracer_medicines: number;
+  baseline_availability: number;
+  baseline_stock_out_days: number;
+  scenarios: { bear: ImpactScenario; base: ImpactScenario; bull: ImpactScenario };
+}

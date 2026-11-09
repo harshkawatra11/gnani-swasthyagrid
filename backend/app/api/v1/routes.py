@@ -7,6 +7,7 @@ from app.api.deps import (
     get_logistics_service,
     get_recommendation_service,
 )
+from app.impact.model import compute as compute_impact_model
 from app.logistics.service import LogisticsService
 from app.schemas.insights import FacilityProfile
 from app.schemas.recommendation import (
@@ -240,3 +241,11 @@ def performance(
     svc: DistrictService = Depends(get_district_service),
 ):
     return {"performance": svc.performance_scores(district_id)}
+
+
+@router.get("/impact")
+def impact():
+    """National impact model: a deterministic projection of the prototype's approach
+    across every PHC and CHC in India. An estimate from a stated model, not a measured
+    outcome; see app/impact/model.py for the full derivation."""
+    return compute_impact_model()
