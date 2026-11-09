@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<style>
+  html, body { margin: 0; background: #f5f7fa; }
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #f5f7fa; font-family: Geist, system-ui, sans-serif; color: #0f172a; }
+  .grid { position: absolute; inset: 0; background-image: radial-gradient(#0f172a 1.2px, transparent 1.2px); background-size: 28px 28px; opacity: .05; }
+  .glow { position: absolute; left: -260px; top: -320px; width: 1000px; height: 1000px; border-radius: 50%; background: radial-gradient(circle, rgba(15,159,122,.12), rgba(15,159,122,0) 68%); }
+  .tag { padding: 12px 18px; border-radius: 999px; font: 600 26px Geist; }
+  .tag.soft { background: #f1f4f8; color: #0f172a; border: 1px solid #e2e7ee; }
+  #end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; }
+  #end img { height: 130px; }
+  #end .word { font: 700 120px/1 Geist; letter-spacing: -.045em; }
+  #end .word b { color: #0f9f7a; font-weight: 700; }
+  #tag { font: 600 40px Geist; color: #0f172a; letter-spacing: -.015em; }
+  #links { display: flex; gap: 18px; margin-top: 18px; }
+  #fine { position: absolute; bottom: 56px; left: 0; right: 0; font: 500 20px Geist; color: #667085; text-align: center; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="endcard" data-width="1920" data-height="1080" data-start="0" data-duration="6">
+  <div class="grid"></div><div class="glow"></div>
+  <div id="end" class="clip" data-start="0" data-duration="6" data-track-index="1">
+    <img src="assets/logo.png" alt="">
+    <div class="word">Swasthya<b>Grid</b></div>
+    <div id="tag">See it early. Move it fast. Close the loop.</div>
+    <div id="links">
+      <div class="tag soft">gnani-swasthyagrid.vercel.app</div>
+      <div class="tag soft">github.com/harshkawatra11/swasthyagrid</div>
+    </div>
+    <div id="fine">Pilot data: 40 illustrative facilities across five Rajasthan districts. Fleet and shipments are simulated on real road routes (OpenStreetMap, OSRM).</div>
+  </div>
+</div>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  tl.from("#end img", { opacity: 0, scale: 0.9, duration: 0.7, ease: "power3.out" }, 0.1);
+  tl.from("#end .word", { opacity: 0, y: 22, duration: 0.6, ease: "power3.out" }, 0.3);
+  tl.from("#tag", { opacity: 0, y: 16, duration: 0.6, ease: "power3.out" }, 0.8);
+  tl.from("#links > div", { opacity: 0, y: 12, duration: 0.5, stagger: 0.12, ease: "power3.out" }, 1.3);
+  tl.from("#fine", { opacity: 0, duration: 0.6 }, 1.8);
+  window.__timelines = window.__timelines || {};
+  window.__timelines["endcard"] = tl;
+</script>
+</body>
+</html>

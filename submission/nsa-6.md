@@ -113,15 +113,15 @@ SwasthyaGrid is built for rural PHC staff. It works by voice in Hindi and Hingli
 
 ## N4. Upload (PDF, PPT, PPTX, PNG or JPG, 5 MB each)
 
-**DEPENDS ON Part D (deck rebrand) and Part E3 (fresh screenshots).**
+All five files are built and sit in `submission/` in the repo, ready to attach:
 
-| # | File | Source | Target size |
-|---|---|---|---|
-| 1 | `Harsh_Kawatra_SwasthyaGrid_NSA6_Deck.pdf` | Part D5 export | under 5 MB |
-| 2 | `SwasthyaGrid_01_Command_Centre.jpg` | README shots, Part E3 | under 1 MB |
-| 3 | `SwasthyaGrid_02_Recommendations.jpg` | README shots, Part E3 | under 1 MB |
-| 4 | `SwasthyaGrid_03_Voice.jpg` | README shots, Part E3 | under 1 MB |
-| 5 | `SwasthyaGrid_04_Dispatch.jpg` | README shots, Part E3 | under 1 MB |
+| # | File | Actual size |
+|---|---|---|
+| 1 | `Harsh_Kawatra_SwasthyaGrid_NSA6_Deck.pdf` | 3.24 MB |
+| 2 | `SwasthyaGrid_01_Command_Centre.jpg` | 0.16 MB |
+| 3 | `SwasthyaGrid_02_Recommendations.jpg` | 0.39 MB |
+| 4 | `SwasthyaGrid_03_Voice.jpg` | 0.18 MB |
+| 5 | `SwasthyaGrid_04_Dispatch.jpg` | 0.39 MB |
 
 If the form field accepts only one file, upload the deck PDF only (it should already carry the
 product screenshots as an appendix via the deck's S6-equivalent).
