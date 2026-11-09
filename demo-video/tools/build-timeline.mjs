@@ -113,13 +113,12 @@ for (const id of sc.screenScenes) {
     const replyDur = probe(path.join(ROOT, "audio/voice/reply.wav"));
     const replyAt2 = replyAt + 0.5;
     const bAt = replyAt2 + replyDur + 0.35;
-    // S11b is dropped: the only recorded take is the old "built on Sarvam AI" line, which is
-    // no longer true, and no replacement take has been recorded. See demo-video/script/vo-script.md.
-    const T11 = Math.min(bAt + 0.7, e.endT / 1000 - 0.4);
+    const T11 = Math.min(bAt + (vt.S11b ?? sc.maxSec.S11b) + 0.5, e.endT / 1000 - 0.4);
     addVo("S11a", spanStart + t + 0.4);
     voQueue.push({ file: "audio/voice/reply.wav", atSec: spanStart + t + replyAt2, reply: true });
     const hindi = fs.readFileSync(path.join(ROOT, "audio/voice/reply.txt"), "utf8").trim();
     captions.push({ from: F(spanStart + t + replyAt2), to: F(spanStart + t + replyAt2 + replyDur) - 1, text: `Voice agent, in Hindi: ${hindi}` });
+    addVo("S11b", spanStart + t + bAt);
     pushClip("S11", "clips/S11.mp4", T11, 0, "S11");
     t += T11;
     continue;

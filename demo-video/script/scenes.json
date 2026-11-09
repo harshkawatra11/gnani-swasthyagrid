@@ -2,7 +2,7 @@
   "fps": 30,
   "leadSec": 0.4,
   "tailSec": 0.9,
-  "maxTotalSec": 180,
+  "maxTotalSec": 192,
   "chapters": {
     "S02": { "num": "01", "name": "See", "line": "The state at a glance" },
     "S06": { "num": "02", "name": "Decide", "line": "A proposed fix, with its reasons" },
@@ -22,6 +22,7 @@
     "S08": "Open a shipment for a live ETA, every stage of the journey, the driver, and the cold-chain temperature, minute by minute.",
     "S09": "Fleet shows what every truck is carrying, pallet by pallet. Drivers shows who's on shift and how many hours they have left.",
     "S11a": "Or just ask it. In Hindi, Hinglish or English.",
+    "S11b": "The voice agent runs on Gnani.ai speech models. It checks the live data first, shows its working, and answers only from what it finds.",
     "S12": "Underneath sit the operational views: stock cover heatmaps, footfall forecasts, bed pressure, doctor attendance, diagnostics, and analytics that explain why a score moved. Every view works for the whole state or a single district.",
     "S13": "When the truck arrives, the clinic confirms delivery in its own portal. Stock goes up, and back in the district office, the facility's risk drops. Live, no refresh.",
     "S13alt": "When the truck arrives, the clinic confirms delivery in its own portal. Stock goes up, and back in the district office, the case file updates. Live, no refresh.",
@@ -30,7 +31,7 @@
   },
   "maxSec": {
     "S00": 13.8, "S01": 5.0, "S02": 20.0, "S03": 10.8, "S04": 8.8, "S06": 16.7, "S07": 12.7,
-    "S08": 9.7, "S09": 8.7, "S11a": 5.0, "S12": 15.7, "S13": 12.7, "S13alt": 12.7,
+    "S08": 9.7, "S09": 8.7, "S11a": 5.0, "S11b": 11.5, "S12": 15.7, "S13": 12.7, "S13alt": 12.7,
     "S14": 10.0, "S15": 5.0
   },
   "screenScenes": ["S02", "S03", "S04", "S06", "S07", "S08", "S09", "S11", "S12", "S13"],

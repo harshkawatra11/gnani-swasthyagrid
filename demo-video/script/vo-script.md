@@ -44,7 +44,8 @@
 **S11a.wav** (Max 4.0s)
 > Or just ask it. In Hindi, Hinglish or English.
 
-**S11b dropped.** The only recorded take says "built on Sarvam AI," which is no longer true, and no replacement has been recorded. The cut skips straight from the Hindi reply to the next scene.
+**S11b.wav** (Max 11.5s)
+> The voice agent runs on Gnani.ai speech models. It checks the live data first, shows its working, and answers only from what it finds.
 
 **S12.wav** (Max 13.7s)
 > Underneath sit the operational views: stock cover heatmaps, footfall forecasts, bed pressure, doctor attendance, diagnostics, and analytics that explain why a score moved. Every view works for the whole state or a single district.
@@ -65,7 +66,7 @@
 
 ## Checklist before you send them over
 
-- [ ] 15 files total (S00 through S15 excluding S05, S10 and S11b, plus S11a and S13alt), named exactly as above
+- [ ] 16 files total (S00 through S15 excluding S05 and S10, plus S11a, S11b and S13alt), named exactly as above
 - [ ] Each one under its Max time
 - [ ] No file cuts off the first or last word
 - [ ] Saved into `demo-video/vo/raw/`
