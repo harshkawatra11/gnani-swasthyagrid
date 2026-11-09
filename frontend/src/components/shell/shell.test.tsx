@@ -97,8 +97,8 @@ describe("sidebar active state", () => {
   it("lists every sidebar route of the plan", () => {
     expect(navItems.map((n) => n.href)).toEqual([
       "/command", "/voice", "/recommendations", "/districts",
-      "/supply", "/supply/fleet", "/supply/drivers", "/supply/planning",
-      "/inventory", "/footfall", "/analytics",
+      "/supply", "/supply/fleet", "/supply/drivers",
+      "/inventory", "/footfall", "/beds", "/doctors", "/diagnostics", "/analytics",
     ]);
   });
 

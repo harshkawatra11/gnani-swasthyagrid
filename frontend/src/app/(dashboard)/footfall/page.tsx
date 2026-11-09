@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { KpiTile } from "@/components/ds/KpiTile";
 import { Select } from "@/components/ds/Select";
+import { Skeleton } from "@/components/ds/Skeleton";
 import { useFootfall } from "@/lib/api/hooks";
 import { DISTRICT_IDS, useScope } from "@/lib/scope";
+import { useElementSize } from "@/lib/use-element-size";
 import { DistrictMultiple, FactorChips, FanChart, FootfallCalendar, TomorrowBreakdown } from "@/components/operations/FootfallPanels";
-import { AssumptionRow, Callout, InsightCard, Moneyshot, PageSkeleton, ScenarioSwitch, useFacRefs } from "@/components/operations/kit";
+import { AssumptionRow, Callout, InsightCard, Moneyshot, ScenarioSwitch, useFacRefs } from "@/components/operations/kit";
 import {
   DISTRICT_ORDER,
   deriveFootfall,
@@ -39,6 +41,7 @@ export default function FootfallPage() {
   const [scenario, setScenario] = useState<ScenarioId>("realistic");
   const factor = scenarioOf(scenario).factor;
   const selected = scope !== "all" ? scope : (pick ?? "district_jaipur_rural");
+  const [fanBodyRef, fanBody] = useElementSize<HTMLDivElement>();
 
   const q0 = useFootfall(DISTRICT_IDS[0]);
   const q1 = useFootfall(DISTRICT_IDS[1]);
@@ -92,9 +95,9 @@ export default function FootfallPage() {
 
   if (!current || !model) {
     return (
-      <div>
-        <PageHeader eyebrow="Footfall" title="Footfall forecast studio" />
-        {loading ? <PageSkeleton /> : <p className="text-[13px] text-muted">No footfall forecast is available.</p>}
+      <div className="flex flex-col gap-3 lg:h-[calc(100dvh-136px)] lg:overflow-hidden">
+        <PageHeader eyebrow="Footfall" title="Footfall forecast studio" className="mb-2" />
+        {loading ? <Skeleton className="min-h-0 flex-1" /> : <p className="text-[13px] text-muted">No footfall forecast is available.</p>}
       </div>
     );
   }
@@ -106,104 +109,105 @@ export default function FootfallPage() {
   const bdTotal = Object.values(bd).reduce((a, b) => a + b, 0);
   const emergencyShare = bdTotal > 0 ? Math.round(((bd.emergency ?? 0) / bdTotal) * 100) : 0;
   const topGroup = Object.entries(bd).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "general";
+  const fanHeight = Math.max(160, (fanBody.height || 320) - 108);
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3 lg:h-[calc(100dvh-136px)] lg:overflow-hidden">
       <PageHeader
         eyebrow="Footfall"
         title="Footfall forecast studio"
+        className="mb-2"
         description="Predicted outpatient visits for the coming week, with the uncertainty shown as a band and the scenario named."
         actions={
-          <Select
-            value={current.districtId}
-            onValueChange={setPick}
-            ariaLabel="District"
-            options={DISTRICT_ORDER.map((d) => ({ value: d, label: shortDistrict(d) }))}
-          />
+          <>
+            <Select
+              value={current.districtId}
+              onValueChange={setPick}
+              ariaLabel="District"
+              options={DISTRICT_ORDER.map((d) => ({ value: d, label: shortDistrict(d) }))}
+            />
+            <ScenarioSwitch value={scenario} onChange={setScenario} label="Footfall scenario" />
+          </>
         }
       />
 
-      <div className="grid gap-3 xl:grid-cols-12">
+      {/* KPI band: the state-of-play numbers for the selected district */}
+      <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-5">
+        <Moneyshot
+          tone="brand"
+          value={model.tomorrow}
+          unit="visits"
+          label={`${name}, ${model.tomorrowLabel}`}
+          note={`${model.tomorrow >= model.stateMean ? "Above" : "Below"} the five district mean of ${Math.round(model.stateMean)}.`}
+          className="col-span-2"
+        />
+        <KpiTile label="State visits tomorrow" value={model.stateTomorrow} sparkline={data.map((d) => tomorrowOf(d.forecast, 1))} hint="Sum of the five districts" className="p-2.5" />
+        <KpiTile label={`${name} next 7 days`} value={model.weekTotal} sparkline={spark} hint="Predicted visits in the window" className="p-2.5" />
+        <KpiTile label="Emergency share" value={emergencyShare} unit="%" tone={emergencyShare > 15 ? "warning" : "default"} hint="Of tomorrow's predicted visits" className="p-2.5" />
+      </div>
+
+      {/* Dense row: daily forecast, tomorrow breakdown and the district-by-day calendar, all at once */}
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-12">
         <InsightCard
-          className="xl:col-span-8"
+          className="min-h-0 lg:col-span-6"
           eyebrow={`Daily visits, ${name}`}
           title={footfallTitle(name, scaledPts, model.dayMean)}
           source={SOURCE}
           section="Footfall / Forecast"
           actions={<Callout>Confidence {current.forecast.confidence}%</Callout>}
+          bodyClassName="min-h-0 flex-1 overflow-hidden"
         >
-          <div className="mb-3">
-            <ScenarioSwitch value={scenario} onChange={setScenario} label="Footfall scenario" />
+          <div ref={fanBodyRef} className="flex h-full flex-col">
+            <FanChart forecast={current.forecast} factor={factor} height={fanHeight} />
+            <AssumptionRow active={scenario} />
           </div>
-          <FanChart forecast={current.forecast} factor={factor} height={280} />
-          <AssumptionRow active={scenario} />
         </InsightCard>
 
-        <div className="flex flex-col gap-3 xl:col-span-4">
-          <Moneyshot
-            tone="brand"
-            value={model.tomorrow}
-            unit="visits"
-            label={`${name}, ${model.tomorrowLabel}`}
-            note={`${model.tomorrow >= model.stateMean ? "Above" : "Below"} the five district mean of ${Math.round(model.stateMean)}. ${emergencyShare}% of tomorrow's visits are emergency cases.`}
-          />
-          <InsightCard
-            eyebrow="Tomorrow breakdown"
-            title={`${name} sees ${model.tomorrow} visits, led by ${topGroup} cases`}
-            source="Source: footfall model, tomorrow breakdown by patient group"
-            section="Footfall / Tomorrow"
-            className="flex-1"
-          >
-            <TomorrowBreakdown breakdown={bd} factor={factor} />
-            <div className="mt-4 border-t border-border pt-3">
-              <p className="mb-2 text-[11px] font-medium text-muted">Forecast drivers, model confidence {current.forecast.confidence}%</p>
-              <FactorChips factors={current.forecast.factors} />
-            </div>
-          </InsightCard>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <KpiTile label="State visits tomorrow" value={model.stateTomorrow} sparkline={data.map((d) => tomorrowOf(d.forecast, 1))} hint="Sum of the five districts" />
-        <KpiTile label={`${name} next 7 days`} value={model.weekTotal} sparkline={spark} hint="Predicted visits in the window" />
-        <KpiTile label="Model confidence" value={current.forecast.confidence} unit="%" tone={current.forecast.confidence < 80 ? "warning" : "good"} hint={`${current.forecast.factors.length} drivers named`} />
-        <KpiTile label="Emergency share" value={emergencyShare} unit="%" tone={emergencyShare > 15 ? "warning" : "default"} hint="Of tomorrow's predicted visits" />
-      </div>
-
-      <InsightCard
-        eyebrow="District by day calendar"
-        title={`${shortDistrict(model.busiest.districtId)} carries the heaviest single day of the week at ${peakOf(model.busiest.forecast)} visits`}
-        source={SOURCE}
-        section="Footfall / Calendar"
-      >
-        <FootfallCalendar data={visible.length ? visible : data} selected={current.districtId} factor={factor} onSelect={setPick} />
-      </InsightCard>
-
-      <div className="grid gap-3 xl:grid-cols-12">
         <InsightCard
-          className="xl:col-span-12"
-          eyebrow="Five district comparison"
-          title={`Tomorrow's load peaks at ${model.maxTomorrow} visits, shown on the same axes for all five districts`}
-          source={SOURCE}
-          section="Footfall / Districts"
+          className="min-h-0 lg:col-span-3"
+          eyebrow="Tomorrow breakdown"
+          title={`${name} sees ${model.tomorrow} visits, led by ${topGroup} cases`}
+          source="Source: footfall model, tomorrow breakdown by patient group"
+          section="Footfall / Tomorrow"
+          bodyClassName="min-h-0 flex-1 overflow-auto"
         >
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-            {data.map((d) => (
-              <DistrictMultiple
-                key={d.districtId}
-                districtId={d.districtId}
-                forecast={d.forecast}
-                factor={factor}
-                stateMean={model.stateMean}
-                active={d.districtId === current.districtId}
-                onSelect={() => setPick(d.districtId)}
-              />
-            ))}
-          </div>
-          <div className="mt-3">
-            <Callout>Grey bars are days already observed, blue bars are forecast. Click a district to load it into the studio above.</Callout>
+          <TomorrowBreakdown breakdown={bd} factor={factor} />
+          <div className="mt-3 border-t border-border pt-2">
+            <p className="mb-1.5 text-[11px] font-medium text-muted">Forecast drivers, model confidence {current.forecast.confidence}%</p>
+            <FactorChips factors={current.forecast.factors} />
           </div>
         </InsightCard>
+
+        <InsightCard
+          className="min-h-0 lg:col-span-3"
+          eyebrow="District by day calendar"
+          title={`${shortDistrict(model.busiest.districtId)} carries the heaviest single day at ${peakOf(model.busiest.forecast)} visits`}
+          source={SOURCE}
+          section="Footfall / Calendar"
+          bodyClassName="min-h-0 flex-1 overflow-auto"
+        >
+          <FootfallCalendar data={visible.length ? visible : data} selected={current.districtId} factor={factor} onSelect={setPick} />
+        </InsightCard>
+      </div>
+
+      {/* Five district comparison strip, always visible rather than tabbed away */}
+      <div className="shrink-0">
+        <p className="mb-1.5 text-[11px] text-faint">
+          Tomorrow&apos;s load peaks at <span className="num font-semibold text-text">{model.maxTomorrow}</span> visits. Grey bars are observed days, blue bars are forecast; click a district to load it above.
+        </p>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          {data.map((d) => (
+            <DistrictMultiple
+              key={d.districtId}
+              districtId={d.districtId}
+              forecast={d.forecast}
+              factor={factor}
+              stateMean={model.stateMean}
+              active={d.districtId === current.districtId}
+              onSelect={() => setPick(d.districtId)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

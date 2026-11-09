@@ -221,8 +221,8 @@ export function DistrictDetail({ districtId }: { districtId: string }) {
           {kpi("Risk index", row.risk_index, avg((d) => d.risk_index), { tone: row.risk_index > 35 ? "critical" : "warning", sparkline: dist((r) => order(r)), href: "/districts" })}
           {kpi("Critical facilities", critical, avg((d) => d.risk_counts.critical), { tone: critical > 0 ? "critical" : "good", href: withScope("/recommendations", districtId), sparkline: dist((r) => r.values.inventory) })}
           {kpi("Stock-out items", row.stockout_items, avg((d) => d.stockout_items), { tone: row.stockout_items > 0 ? "critical" : "good", href: withScope("/inventory", districtId) })}
-          {kpi("Beds next week", Math.round(row.bed_next_week_avg), avg((d) => d.bed_next_week_avg), { unit: "%", sparkline: dist((r) => r.values.beds) })}
-          {kpi("Doctors at risk", row.doctors_high_risk, avg((d) => d.doctors_high_risk), {})}
+          {kpi("Beds next week", Math.round(row.bed_next_week_avg), avg((d) => d.bed_next_week_avg), { unit: "%", href: withScope("/beds", districtId), sparkline: dist((r) => r.values.beds) })}
+          {kpi("Doctors at risk", row.doctors_high_risk, avg((d) => d.doctors_high_risk), { href: withScope("/doctors", districtId) })}
           {kpi("Pending approvals", row.pending_recommendations, avg((d) => d.pending_recommendations), { href: withScope("/recommendations", districtId) })}
           {kpi("In transit", row.shipments_in_transit, avg((d) => d.shipments_in_transit), { href: withScope("/supply", districtId), className: "col-span-2" })}
           <div className="col-span-2 rounded-md border border-border bg-surface-1 p-3">

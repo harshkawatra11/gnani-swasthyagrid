@@ -50,3 +50,10 @@ test.describe("F2 facility profile", () => {
     await noRawIds(page);
   });
 });
+
+test.describe("F2 redirects", () => {
+  test("the removed Load Planning route redirects to Dispatch", async ({ page }) => {
+    await page.goto("/supply/planning");
+    await expect(page).toHaveURL(/\/supply$/);
+  });
+});

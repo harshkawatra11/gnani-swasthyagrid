@@ -8,7 +8,7 @@ const VIEWPORTS = [
   { width: 1920, height: 1080 },
 ];
 
-const NO_SCROLL_ROUTES = ["/districts", "/supply"];
+const NO_SCROLL_ROUTES = ["/districts", "/supply", "/beds", "/doctors", "/diagnostics", "/footfall"];
 
 for (const viewport of VIEWPORTS) {
   test.describe(`one-screen layouts at ${viewport.width}x${viewport.height}`, () => {

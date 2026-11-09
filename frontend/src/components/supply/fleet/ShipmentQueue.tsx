@@ -40,8 +40,8 @@ export function ShipmentQueue({
       footer={
         <span className="flex items-center justify-between">
           <span>Source: planner queue, live</span>
-          <Link href="/supply/planning" className="inline-flex items-center gap-1 text-brand hover:underline">
-            Load planning <ArrowRight size={11} aria-hidden />
+          <Link href="/supply" className="inline-flex items-center gap-1 text-brand hover:underline">
+            Dispatch <ArrowRight size={11} aria-hidden />
           </Link>
         </span>
       }
