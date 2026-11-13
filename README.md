@@ -6,7 +6,7 @@
 
 [![Live App](https://img.shields.io/badge/Live_App-gnani--swasthyagrid.vercel.app-2dd4a7?style=for-the-badge&logo=vercel&logoColor=white)](https://gnani-swasthyagrid.vercel.app)
 [![Backend](https://img.shields.io/badge/Backend-Cloud_Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://gnani-swasthyagrid-api-1007546129237.asia-south1.run.app/health)
-[![Backend tests](https://img.shields.io/badge/backend_tests-386_passing-19b98c?style=for-the-badge&logo=pytest&logoColor=white)](#testing-and-evaluation)
+[![Backend tests](https://img.shields.io/badge/backend_tests-392_passing-19b98c?style=for-the-badge&logo=pytest&logoColor=white)](#testing-and-evaluation)
 [![Frontend tests](https://img.shields.io/badge/frontend_tests-271_passing-19b98c?style=for-the-badge&logo=vitest&logoColor=white)](#testing-and-evaluation)
 [![License](https://img.shields.io/badge/license-Apache_2.0-93691f?style=for-the-badge)](LICENSE)
 
@@ -344,7 +344,7 @@ Every card is tied to a real file in this repository.
 | Google Cloud Run, Artifact Registry, Secret Manager | Backend hosting, Always Free tier, scale to zero | `backend/scripts/deploy.sh` |
 | GitHub Actions | Lint, typecheck, test and build gate on every push and pull request | `.github/workflows/ci-cd.yml` |
 | Playwright | End-to-end specs and the fit-at-1920x1080 screenshot tooling | `frontend/e2e/`, `frontend/scripts/fit-check.mjs` |
-| Vitest, Pytest, Ruff | 271 frontend unit tests, 386 backend tests, backend lint | `frontend/src/**/*.test.ts*`, `backend/tests/` |
+| Vitest, Pytest, Ruff | 271 frontend unit tests, 392 backend tests, backend lint | `frontend/src/**/*.test.ts*`, `backend/tests/` |
 
 ## What is in this repository
 
@@ -781,7 +781,7 @@ Step 9 needs a CRM login for the receiving facility. See [Known limitations](#kn
 
 ## Testing and evaluation
 
-Current counts at the time of writing (9 Nov 2026): 386 backend tests and 271 frontend tests, both fully passing with `DATA_SOURCE=seed`.
+Current counts at the time of writing (13 Nov 2026): 392 backend tests and 271 frontend tests, both fully passing with `DATA_SOURCE=seed`.
 
 ```bash
 # backend (from backend/, venv active)

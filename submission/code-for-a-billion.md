@@ -54,7 +54,7 @@ Up to one in three key medicines can be missing from a Primary Health Centre she
 
 **How I used AgentFoundry (AF).** AF is the event's listed IDE, built around Claude Code: it gives the same models through the same agent, plus a bundled allotment of free API credits. I tried it and confirmed that, since this build already runs on a paid Claude subscription, those free credits add nothing and the resulting work is identical either way. The national impact model (`backend/app/impact/model.py`, its `/api/v1/impact` endpoint and tests, and its Analyst Workbench card) and the federation design note (`docs/federation.md`) were built with Claude Code directly, which is what AF's editor wraps.
 
-**Engineering.** Next.js 16 and TypeScript frontend on Vercel, FastAPI backend on Cloud Run, Firestore for the clinic intake app, OpenStreetMap road routes and geoBoundaries district shapes. 386 backend and 271 frontend tests run in GitHub Actions on every push, plus Playwright end-to-end tests. Apache-2.0.
+**Engineering.** Next.js 16 and TypeScript frontend on Vercel, FastAPI backend on Cloud Run, Firestore for the clinic intake app, OpenStreetMap road routes and geoBoundaries district shapes. 392 backend and 271 frontend tests run in GitHub Actions on every push, plus Playwright end-to-end tests. Apache-2.0.
 
 **Research.** The problem sizing, source register and impact model behind every number above are written up in full at https://github.com/harshkawatra11/ppts-case-study/blob/main/swasthyagrid-gcp/nexora/research/swasthyagrid-nexora-research.pdf (also linked from the pitch deck).
 ```
@@ -115,7 +115,7 @@ Fallback if no video is ready in time: `https://gnani-swasthyagrid.vercel.app`
 - Live app: https://gnani-swasthyagrid.vercel.app, backend on Google Cloud Run, source at https://github.com/harshkawatra11/swasthyagrid.
 - Scope: 40 facilities (30 PHCs, 10 CHCs) in 5 Rajasthan districts. Operational data is simulated and labelled so in the app. Road routes (365, OpenStreetMap) and district boundaries are real.
 - Measured in the prototype: at PHC Kota-4, anti-rabies vaccine cover went from **1.2 days to 21.0 days** after one approved refill. From approval to the clinic's risk dropping on the district screen takes about 4 minutes at the 60x simulated clock.
-- Quality: 386 backend and 271 frontend tests pass in CI on every push.
+- Quality: 392 backend and 271 frontend tests pass in CI on every push.
 
 **Expected impact (model, not measured)**
 
