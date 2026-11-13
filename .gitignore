@@ -1,6 +1,10 @@
 # Internal agent notes, not for a public repo
 memory/
 
+# Non-technical / supporting material, kept locally but not in the public repo
+submission/
+images/
+
 # Node
 node_modules/
 .next/
@@ -48,19 +52,6 @@ backend/.runtime-b2/
 frontend/test-results/
 frontend/playwright-report/
 
-# demo video media
-demo-video/**/node_modules/
-demo-video/vo/raw/
-demo-video/vo/clean/
-demo-video/vo/*.json
-demo-video/capture/state.json
-demo-video/capture/raw/
-demo-video/capture/clips/
-demo-video/motion/**/renders/
-demo-video/motion/out/
-demo-video/audio/
-demo-video/remotion/public/
-demo-video/remotion/out/
-demo-video/remotion/src/timeline.json
-demo-video/out/
+# Demo video pipeline and media, not core to the technical repo
+demo-video/
 brag-output*/
